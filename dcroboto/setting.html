@@ -145,6 +145,42 @@ td input, td select {
     const el = (tag, attrs={}, children=[]) => { const n=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>{ if(k==='class') n.className=v; else if(k==='text') n.textContent=v; else n.setAttribute(k,v); }); children.forEach(c=>n.appendChild(c)); return n; };
     const fmtTime = (s)=> s? new Date(s).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' }) : '-';
 
+    // ===== 學生下拉快取 =====
+let STUDENT_OPTIONS = [];
+
+async function loadStudentNames() {
+  const { data, error } = await adminClient
+    .from('student_cache')
+    .select('student_name')
+    .order('student_name', { ascending: true });
+  if (error) { console.warn('[loadStudentNames]', error); return []; }
+  STUDENT_OPTIONS = (data || []).map(r => r.student_name);
+  return STUDENT_OPTIONS;
+}
+
+function makeStudentSelect(currentValue) {
+  const sel = document.createElement('select');
+  // 先清空
+  sel.innerHTML = '';
+  // 若目前值不在名單（例如舊資料、或剛改名未重整），先加一個暫時 option
+  if (currentValue && !STUDENT_OPTIONS.includes(currentValue)) {
+    const o = document.createElement('option');
+    o.value = currentValue; o.textContent = currentValue + '（未在快取清單）';
+    sel.appendChild(o);
+  }
+  // 加入全部學生
+  STUDENT_OPTIONS.forEach(name => {
+    const o = document.createElement('option');
+    o.value = name; o.textContent = name;
+    if (name === currentValue) o.selected = true;
+    sel.appendChild(o);
+  });
+  // 若沒有值，就選第一個（如果有名單的話）
+  if (!currentValue && sel.options.length > 0) sel.selectedIndex = 0;
+  return sel;
+}
+
+
     // ------------------------
     // Auth (C 專案)
     // ------------------------
@@ -475,10 +511,11 @@ return tr;
     // TAP5：戰鬥攜帶物
     // ------------------------
     async function renderTab5(root){
+      await loadStudentNames();
       const wrap = el('div',{class:'card'});
       wrap.append(el('div',{class:'row'},[el('strong',{text:'戰鬥攜帶物'}), el('span',{class:'chip',text:'battle_items'})]));
       const f = el('div',{class:'grid grid-4'});
-      const f_student = el('input',{type:'text', placeholder:'角色名稱（student_name）'});
+const f_student = makeStudentSelect();
       const f_slot = el('input',{type:'number', placeholder:'欄位 1-4', min:1, max:4});
       const f_name = el('input',{type:'text', placeholder:'裝備名稱'});
       const f_effect = el('input',{type:'text', placeholder:'效果文字（可空）'});
@@ -492,7 +529,16 @@ return tr;
       wrap.append(f,list); root.append(wrap);
 
       add.addEventListener('click', async ()=>{
-        add.disabled=true; const body={ student_name:f_student.value.trim(), slot:Number(f_slot.value||0), item_name:f_name.value.trim(), item_effect:f_effect.value||null, uses_left: f_uses.value? Number(f_uses.value): null, locked_until_broken: f_lock.value==='true' };
+        add.disabled=true; 
+const body={ 
+  student_name: f_student.value,   // ✅ 下拉選的值
+  slot:Number(f_slot.value||0),
+  item_name:f_name.value.trim(),
+  item_effect:f_effect.value||null,
+  uses_left: f_uses.value? Number(f_uses.value): null,
+  locked_until_broken: f_lock.value==='true'
+};
+
         const { error } = await adminClient.from('battle_items').insert(body); add.disabled=false; if(!error){ f_student.value=f_slot.value=f_name.value=f_effect.value=f_uses.value=''; load(); }
       });
 
@@ -502,7 +548,7 @@ return tr;
       }
       function row(r){
         const tr = document.createElement('tr');
-        const stu = el('input',{type:'text', value:r.student_name});
+const stu = makeStudentSelect(r.student_name);
         const slot = el('input',{type:'number', value:r.slot, min:1, max:4});
         const name = el('input',{type:'text', value:r.item_name});
         const eff = el('input',{type:'text', value:r.item_effect||''});
@@ -513,7 +559,15 @@ return tr;
         tr.append(el('td',{},[stu]), el('td',{},[slot]), el('td',{},[name]), el('td',{},[eff]), el('td',{},[uses]), el('td',{},[lock]));
         const tbtn=el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
         save.addEventListener('click', async()=>{
-          save.disabled=true; const body={ student_name:stu.value.trim(), slot:Number(slot.value||0), item_name:name.value.trim(), item_effect:eff.value||null, uses_left: uses.value? Number(uses.value): null, locked_until_broken: lock.value==='true' };
+          save.disabled=true; 
+const body={ 
+  student_name: stu.value,         // ✅ 送下拉的值
+  slot:Number(slot.value||0),
+  item_name:name.value.trim(),
+  item_effect:eff.value||null,
+  uses_left: uses.value? Number(uses.value): null,
+  locked_until_broken: lock.value==='true'
+};
           const { error } = await adminClient.from('battle_items').update(body).eq('id', r.id); save.disabled=false; if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
         });
         del.addEventListener('click', async()=>{ if(!confirm('確定刪除？')) return; const { error } = await adminClient.from('battle_items').delete().eq('id', r.id); if(!error) tr.remove(); });
