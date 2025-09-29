@@ -84,6 +84,8 @@
     .modal .row { flex-direction: row; justify-content: flex-end; }
     .modal .msg { font-size: 12px; color:#5a728f; min-height: 1.2em; }
     .modal .close-x { position:absolute; right:12px; top:8px; cursor:pointer; color:#5a728f; }
+    .delta.plus { color:#157f3b; font-weight:700; }
+    .delta.minus { color:#b42318; font-weight:700; }
   </style>
 </head>
 <body>
@@ -99,10 +101,12 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="t1">學生快取 / 玩家綁定</button>
       <button class="tab-btn" data-tab="t2">地區表</button>
-      <button class="tab-btn" data-tab="t3">時薪設定</button>
+      <button class="tab-btn" data-tab="t3">時薪/點數設定</button>
       <button class="tab-btn" data-tab="t4">販售道具</button>
       <button class="tab-btn" data-tab="t5">戰鬥攜帶物</button>
       <button class="tab-btn" data-tab="t6">教師文本</button>
+      <!-- ✅ 新增 -->
+      <button class="tab-btn" data-tab="t7">交易紀錄</button>
     </div>
 
     <div id="content"></div>
@@ -125,7 +129,7 @@
     </div>
   </div>
 
-  <!-- A 專案登入彈窗 -->
+  <!-- 你原本的 A 專案登入彈窗（保留可用），沒有 msg 節點也沒關係 -->
   <div id="aLoginMask" class="modal-mask" aria-hidden="true">
     <div class="modal">
       <div class="close-x" id="aLoginClose">✕</div>
@@ -209,165 +213,98 @@
       if (!currentValue && sel.options.length > 0) sel.selectedIndex = 0;
       return sel;
     }
-
-    // ===== A 登入彈窗控制 =====
-    function openALoginModal() {
-      const mask = $('#aLoginMask');
-      $('#aLoginMsg').textContent = '';
-      $('#aEmail').value = '';
-      $('#aPassword').value = '';
-      mask.style.display = 'flex';
-      mask.setAttribute('aria-hidden', 'false');
-      setTimeout(() => $('#aEmail').focus(), 0);
+    function makeStudentFilterSelect(currentValue='') {
+      const sel = document.createElement('select');
+      const all = document.createElement('option'); all.value=''; all.textContent='（全部學生）';
+      sel.appendChild(all);
+      STUDENT_OPTIONS.forEach(name=>{
+        const o=document.createElement('option'); o.value=name; o.textContent=name;
+        if (name===currentValue) o.selected=true;
+        sel.appendChild(o);
+      });
+      return sel;
     }
-    function closeALoginModal() {
-      const mask = $('#aLoginMask');
-      mask.style.display = 'none';
-      mask.setAttribute('aria-hidden', 'true');
-    }
-    $('#aLoginClose').addEventListener('click', closeALoginModal);
-    $('#aLoginCancel').addEventListener('click', closeALoginModal);
-    $('#aLoginDo').addEventListener('click', doALogin);
 
-    async function doALogin(){
-      const msg = $('#aLoginMsg');
-      const email = $('#aEmail').value.trim();
-      const password = $('#aPassword').value;
-      msg.textContent = '登入中…';
-      const { error } = await aClient.auth.signInWithPassword({ email, password });
-      if (error) {
-        msg.textContent = '登入失敗：' + (error.message || '');
+    // ===== A 登入彈窗（動態保險版） =====
+    function ensureALoginDOM() {
+      if (document.getElementById('aLoginMask')) {
+        // 綁定現有 DOM 的按鈕（若存在）
+        const closeX = document.getElementById('aLoginClose'); if (closeX) closeX.addEventListener('click', closeALoginModal);
+        const cancel = document.getElementById('aLoginCancel'); if (cancel) cancel.addEventListener('click', closeALoginModal);
+        const doBtn  = document.getElementById('aLoginDo');    if (doBtn)  doBtn.addEventListener('click', doALogin);
         return;
       }
-      msg.textContent = '登入成功';
+      // 動態建立一份（含 msg）
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <div id="aLoginMask" class="modal-mask" aria-hidden="false">
+          <div class="modal">
+            <div class="close-x" id="aLoginClose">✕</div>
+            <h3>登入 A 專案（wfhwhvodgikpducrhgda）</h3>
+            <div class="field">
+              <label>電子郵件</label>
+              <input id="aEmail" type="text" placeholder="you@example.com" />
+            </div>
+            <div class="field">
+              <label>密碼</label>
+              <input id="aPassword" type="password" placeholder="••••••••" />
+            </div>
+            <div class="row">
+              <span class="msg" id="aLoginMsg"></span>
+              <button class="btn secondary" id="aLoginCancel">取消</button>
+              <button class="btn" id="aLoginDo">登入</button>
+            </div>
+          </div>
+        </div>
+      `.trim();
+      document.body.appendChild(wrap.firstElementChild);
+      document.getElementById('aLoginClose').addEventListener('click', closeALoginModal);
+      document.getElementById('aLoginCancel').addEventListener('click', closeALoginModal);
+      document.getElementById('aLoginDo').addEventListener('click', doALogin);
+    }
+    function openALoginModal() {
+      ensureALoginDOM();
+      const mask = document.getElementById('aLoginMask');
+      const msg  = document.getElementById('aLoginMsg');
+      const mail = document.getElementById('aEmail');
+      const pwd  = document.getElementById('aPassword');
+      if (msg)  msg.textContent = '';
+      if (mail) mail.value = '';
+      if (pwd)  pwd.value = '';
+      if (mask) { mask.style.display = 'flex'; mask.setAttribute('aria-hidden', 'false'); }
+      setTimeout(() => mail && mail.focus(), 0);
+    }
+    function closeALoginModal() {
+      const mask = document.getElementById('aLoginMask');
+      if (mask) { mask.style.display = 'none'; mask.setAttribute('aria-hidden', 'true'); }
+    }
+    async function doALogin(){
+      const msg = document.getElementById('aLoginMsg');
+      const email = (document.getElementById('aEmail')?.value || '').trim();
+      const password = document.getElementById('aPassword')?.value || '';
+      if (msg) msg.textContent = '登入中…';
+      const { error } = await aClient.auth.signInWithPassword({ email, password });
+      if (error) { if (msg) msg.textContent = '登入失敗：' + (error.message || ''); return; }
+      if (msg) msg.textContent = '登入成功';
       setTimeout(() => {
         closeALoginModal();
         if (window.__afterALogin) { try { window.__afterALogin(); } catch(_){} }
-      }, 500);
+      }, 400);
     }
-
-// ===== A 專案登入彈窗：若不存在就動態建立 =====
-function ensureALoginDOM() {
-  if (document.getElementById('aLoginMask')) return; // 已存在
-
-  // 加入基本樣式（若你已經有這些 CSS 可以刪掉這段）
-  if (!document.getElementById('aLoginModalStyles')) {
-    const style = document.createElement('style');
-    style.id = 'aLoginModalStyles';
-    style.textContent = `
-      .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9999}
-      .modal{width:min(420px,92vw);background:#fff;border-radius:12px;padding:16px;box-shadow:0 12px 32px rgba(0,0,0,.2);position:relative}
-      .modal h3{margin:0 0 8px 0;font-size:18px}
-      .modal .field{margin:8px 0;display:flex;flex-direction:column;gap:6px}
-      .modal .row{display:flex;gap:8px;justify-content:flex-end;align-items:center}
-      .modal .msg{font-size:12px;color:#5a728f;min-height:1.2em;margin-right:auto}
-      .modal .close-x{position:absolute;right:12px;top:8px;cursor:pointer;color:#5a728f}
-      .modal input{padding:8px 6px;border:1px solid #d7e3ef;border-radius:8px}
-      .btn{border:none;background:#1767a0;color:#fff;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}
-      .btn.secondary{background:#e9f1f9;color:#143158}
-    `;
-    document.head.appendChild(style);
-  }
-
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <div id="aLoginMask" class="modal-mask" aria-hidden="false">
-      <div class="modal">
-        <div class="close-x" id="aLoginClose">✕</div>
-        <h3>登入 A 專案（wfhwhvodgikpducrhgda）</h3>
-        <div class="field">
-          <label>電子郵件</label>
-          <input id="aEmail" type="text" placeholder="you@example.com" />
-        </div>
-        <div class="field">
-          <label>密碼</label>
-          <input id="aPassword" type="password" placeholder="••••••••" />
-        </div>
-        <div class="row">
-          <span class="msg" id="aLoginMsg"></span>
-          <button class="btn secondary" id="aLoginCancel">取消</button>
-          <button class="btn" id="aLoginDo">登入</button>
-        </div>
-      </div>
-    </div>
-  `.trim();
-  document.body.appendChild(wrap.firstElementChild);
-
-  // 綁定事件（因為是動態插入，這邊一次綁定）
-  document.getElementById('aLoginClose').addEventListener('click', closeALoginModal);
-  document.getElementById('aLoginCancel').addEventListener('click', closeALoginModal);
-  document.getElementById('aLoginDo').addEventListener('click', doALogin);
-}
-
-function openALoginModal() {
-  ensureALoginDOM();                       // ☆ 保證 DOM 存在
-  const mask = document.getElementById('aLoginMask');
-  const msg  = document.getElementById('aLoginMsg');
-  const mail = document.getElementById('aEmail');
-  const pwd  = document.getElementById('aPassword');
-  if (msg) msg.textContent = '';
-  if (mail) mail.value = '';
-  if (pwd)  pwd.value = '';
-  if (mask) { mask.style.display = 'flex'; mask.setAttribute('aria-hidden', 'false'); }
-  setTimeout(() => mail && mail.focus(), 0);
-}
-
-function closeALoginModal() {
-  const mask = document.getElementById('aLoginMask');
-  if (mask) { mask.style.display = 'none'; mask.setAttribute('aria-hidden', 'true'); }
-}
-
-// 進行 A 專案登入；成功後關窗並回呼 __afterALogin（若有）
-async function doALogin(){
-  const msg = document.getElementById('aLoginMsg');
-  const email = (document.getElementById('aEmail')?.value || '').trim();
-  const password = document.getElementById('aPassword')?.value || '';
-  if (msg) msg.textContent = '登入中…';
-  const { error } = await aClient.auth.signInWithPassword({ email, password });
-  if (error) {
-    if (msg) msg.textContent = '登入失敗：' + (error.message || '');
-    return;
-  }
-  if (msg) msg.textContent = '登入成功';
-  setTimeout(() => {
-    closeALoginModal();
-    if (window.__afterALogin) { try { window.__afterALogin(); } catch(_){} }
-  }, 400);
-}
-
-// 檢查 A 是否已登入；未登入 → 開彈窗；登入後 resolve(true)，取消則 resolve(false)
-function ensureALogin() {
-  return new Promise(async (resolve) => {
-    const u = await aClient.auth.getUser();
-    if (u?.data?.user) return resolve(true);
-    openALoginModal();
-    // 登入成功時呼叫
-    window.__afterALogin = () => resolve(true);
-    // 取消時回傳 false
-    const onCancel = () => resolve(false);
-    // 因為按鈕是動態建立，這裡取得當前節點再綁一次（若尚未建立 DOM 會由 openALoginModal 建立）
-    const bindCancelOnce = () => {
-      const cancel = document.getElementById('aLoginCancel');
-      const closeX = document.getElementById('aLoginClose');
-      if (cancel) cancel.addEventListener('click', onCancel, { once:true });
-      if (closeX) closeX.addEventListener('click', onCancel, { once:true });
-    };
-    // 如果此刻 DOM 尚未 ready，稍微延後綁定
-    setTimeout(bindCancelOnce, 0);
-  });
-}
-
-
-    // 確保 A 專案已登入；未登入則彈窗，完成後 resolve(true)，取消關閉則 resolve(false)
     function ensureALogin() {
       return new Promise(async (resolve) => {
         const u = await aClient.auth.getUser();
         if (u?.data?.user) return resolve(true);
         openALoginModal();
         window.__afterALogin = () => resolve(true);
-        const onCancel = () => { resolve(false); };
-        $('#aLoginCancel').addEventListener('click', onCancel, { once:true });
-        $('#aLoginClose').addEventListener('click', onCancel, { once:true });
+        const onCancel = () => resolve(false);
+        // 綁一次取消/關閉
+        setTimeout(()=>{
+          const cancel = document.getElementById('aLoginCancel');
+          const closeX = document.getElementById('aLoginClose');
+          if (cancel) cancel.addEventListener('click', onCancel, { once:true });
+          if (closeX) closeX.addEventListener('click', onCancel, { once:true });
+        },0);
       });
     }
 
@@ -419,6 +356,7 @@ function ensureALogin() {
       if (key==='t4') return renderTab4(c);
       if (key==='t5') return renderTab5(c);
       if (key==='t6') return renderTab6(c);
+      if (key==='t7') return renderTab7(c); // ✅ 新增
     }
 
     // ------------------------
@@ -458,7 +396,7 @@ function ensureALogin() {
       const rowWrap = el('div', {class:'row'}); rowWrap.append(left, right);
       root.append(bar, rowWrap);
 
-      // 點同步：先確保 A 已登入（未登入就彈窗），成功後才同步
+      // 同步：先確保 A 已登入
       syncBtn.addEventListener('click', async () => {
         syncBtn.disabled = true; msg.textContent = '檢查 A 專案登入狀態…';
         const ok = await ensureALogin();
@@ -551,7 +489,7 @@ function ensureALogin() {
     }
 
     // ------------------------
-    // TAP2：地區表 CRUD（含 遊戲/特製 顯示機制欄位）
+    // TAP2：地區表 CRUD（含 遊戲/特製 機制欄位）
     // ------------------------
     async function renderTab2(root){
       const wrap = el('div', {class:'card'});
@@ -564,7 +502,7 @@ function ensureALogin() {
       const f_hook = el('input', {type:'text', placeholder:'Webhook URL（可空）'});
       const f_limit = el('input', {type:'number', placeholder:'每日上限（愛校用，可空）'});
 
-      // ★ 機制欄位（僅「遊戲/特製」顯示）
+      // 機制欄位（遊戲/特製才用）
       const f_mech_label = el('input', {type:'text', placeholder:'機制名稱（遊戲/特製才需要）'});
       const f_mech_code  = el('input', {type:'text', placeholder:'機制代碼（遊戲/特製才需要）'});
       const mechHint = el('div', {class:'help', text:'只有型別為「遊戲」或「特製」時才會使用這兩個欄位'});
@@ -572,9 +510,9 @@ function ensureALogin() {
 
       function toggleCreateMechanicFields(){
         const on = isGameLike(f_type.value);
-        f_mech_label.parentElement?.classList?.toggle?.('hidden', !on);
-        f_mech_code.parentElement?.classList?.toggle?.('hidden', !on);
-        mechHint.style.display = on ? 'block' : 'none';
+        f_mech_label.style.display = on ? '' : 'none';
+        f_mech_code.style.display  = on ? '' : 'none';
+        mechHint.style.display     = on ? 'block' : 'none';
       }
 
       form.append(f_name, f_type, f_thread, f_hook, f_limit, f_mech_label, f_mech_code, addBtn);
@@ -595,7 +533,6 @@ function ensureALogin() {
         </table>`;
       root.append(wrap, list);
 
-      // 初始顯示控制
       toggleCreateMechanicFields();
       f_type.addEventListener('change', toggleCreateMechanicFields);
 
@@ -622,7 +559,7 @@ function ensureALogin() {
       });
 
       async function loadAreas(){
-        const { data, error } = await adminClient.from('area').select('*').order('area_name',{ascending:true});
+        const { data } = await adminClient.from('area').select('*').order('area_name',{ascending:true});
         const tb = $('#areasBody'); tb.innerHTML='';
         (data||[]).forEach(r=>tb.appendChild(areaRow(r)));
       }
@@ -635,21 +572,12 @@ function ensureALogin() {
         const w = el('input',{type:'text', value:r.webhook_url||''});
         const lim = el('input',{type:'number', value: r.daily_limit==null?'':r.daily_limit});
 
-        // 機制欄位（列編輯）
         const mechLabel = el('input',{type:'text', value: r.mechanic_label || ''});
         const mechCode  = el('input',{type:'text', value: r.mechanic_code  || ''});
-
-        // 每列的顯示切換
-        function toggleRowMechanic(){
-          const on = isGameLike(type.value);
-          tdMechLabel.style.display = on ? '' : 'none';
-          tdMechCode.style.display  = on ? '' : 'none';
-        }
 
         const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
         const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
 
-        // 組裝列
         const tdName = el('td',{},[name]);
         const tdType = el('td',{},[type]);
         const tdT = el('td',{},[t]);
@@ -661,6 +589,11 @@ function ensureALogin() {
 
         tr.append(tdName, tdType, tdT, tdW, tdLim, tdMechLabel, tdMechCode, tbtn);
 
+        const toggleRowMechanic = ()=>{
+          const on = isGameLike(type.value);
+          tdMechLabel.style.display = on ? '' : 'none';
+          tdMechCode.style.display  = on ? '' : 'none';
+        };
         toggleRowMechanic();
         type.addEventListener('change', toggleRowMechanic);
 
@@ -695,29 +628,109 @@ function ensureALogin() {
       loadAreas();
     }
 
-    // ------------------------
-    // TAP3：時薪設定
-    // ------------------------
-    async function renderTab3(root){
-      const wrap = el('div',{class:'card'});
-      const work = el('input',{type:'number', placeholder:'一般打工預設時薪'});
-      const spec = el('input',{type:'number', placeholder:'特殊打工預設時薪'});
-      const save = el('button',{class:'btn'},[document.createTextNode('儲存設定')]);
-      const info = el('span',{class:'muted'});
-      wrap.append(el('div',{class:'row'},[el('strong',{text:'時薪設定'}), el('span',{class:'chip',text:'wage_config'})]));
-      const grid = el('div',{class:'grid grid-3'}); grid.append(work, spec, save); wrap.append(grid, el('div',{class:'help'},[document.createTextNode('config_id 固定為 1；只影響新建的打工紀錄。')]), info);
-      root.append(wrap);
+   // ------------------------
+// TAP3：倍率管理（單筆配置）
+// - 一般打工：每小時給的一般貨幣 work_wage_default
+// - 特殊打工：每小時給的謝爾夏貨幣 special_wage_default
+// - 愛校服務：每次給的點數 service_points_per_time
+// 備註：資料表 wage_config 僅用 config_id=1 那一列
+// ------------------------
+async function renderTab3(root){
+  const wrap = el('div',{class:'card'});
 
-      async function load(){
-        const { data } = await adminClient.from('wage_config').select('*').eq('config_id',1).maybeSingle();
-        if (data){ work.value = data.work_wage_default; spec.value = data.special_wage_default; info.textContent = '最後更新：'+fmtTime(data.updated_at); }
-      }
-      save.addEventListener('click', async ()=>{
-        save.disabled=true; const body={ config_id:1, work_wage_default: Number(work.value||0), special_wage_default: Number(spec.value||0) };
-        const { error } = await adminClient.from('wage_config').upsert(body, { onConflict:'config_id' }); save.disabled=false; if(!error){ info.textContent='已儲存：'+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}); }
-      });
-      load();
+  // 欄位
+  const f_work = el('input',{type:'number', placeholder:'一般打工｜每小時 → 一般貨幣（例：100）', min:0});
+  const f_spec = el('input',{type:'number', placeholder:'特殊打工｜每小時 → 謝爾夏貨幣（例：5）', min:0});
+  const f_svc  = el('input',{type:'number', placeholder:'愛校服務｜每次 → 愛校點數（例：1）', min:0});
+
+  const save = el('button',{class:'btn'},[document.createTextNode('儲存倍率')]);
+  const reload = el('button',{class:'btn secondary'},[document.createTextNode('重新載入')]);
+  const info = el('span',{class:'muted'});
+
+  wrap.append(
+    el('div',{class:'row'},[
+      el('strong',{text:'倍率管理'}),
+      el('span',{class:'chip',text:'wage_config（單筆：config_id=1）'})
+    ])
+  );
+
+  const grid = el('div',{class:'grid grid-4'});
+  grid.append(f_work, f_spec, f_svc, save, reload);
+  wrap.append(grid);
+
+  // 說明 + 預覽
+  const help = el('div',{class:'help'});
+  help.innerHTML = `
+    <ul style="margin:8px 0 0 18px; padding:0;">
+      <li>此頁只維護 <b>一筆</b> 倍率（config_id=1）。</li>
+      <li>一般打工：每小時給 <b>一般貨幣</b>；特殊打工：每小時給 <b>謝爾夏貨幣</b>；愛校服務：每次給 <b>愛校點數</b>。</li>
+      <li>你之後的新「累積桶」會依「幣別＋當時倍率」分桶累加；若你把一般打工從 100 調成 150，系統會開始往「一般貨幣/150」那桶累積；若再調回 100，會回到「一般貨幣/100」那桶繼續累積。</li>
+    </ul>
+  `;
+  const preview = el('div',{class:'card', style:'margin-top:8px'});
+  const pvText = el('div',{class:'muted'});
+  preview.append(el('div',{text:'目前設定（預覽）'}), pvText);
+
+  wrap.append(help, preview, info);
+  root.append(wrap);
+
+  // 載入
+  async function load(){
+    const { data, error } = await adminClient
+      .from('wage_config')
+      .select('work_wage_default, special_wage_default, service_points_per_time, updated_at')
+      .eq('config_id', 1)
+      .maybeSingle();
+
+    if (error) {
+      info.textContent = '讀取失敗：' + (error.message || '');
+      return;
     }
+    // 沒有資料就視為 0，顯示空字串比較好編
+    f_work.value = data?.work_wage_default ?? '';
+    f_spec.value = data?.special_wage_default ?? '';
+    f_svc.value  = data?.service_points_per_time ?? '';
+    info.textContent = data?.updated_at ? ('最後更新：' + fmtTime(data.updated_at)) : '尚未建立設定（請儲存一次）';
+    renderPreview();
+  }
+
+  function renderPreview(){
+    const w = Number(f_work.value || 0);
+    const s = Number(f_spec.value || 0);
+    const p = Number(f_svc.value || 0);
+    pvText.textContent = `一般打工：每小時 +${w} 一般貨幣；特殊打工：每小時 +${s} 謝爾夏貨幣；愛校服務：每次 +${p} 愛校點數`;
+  }
+
+  f_work.addEventListener('input', renderPreview);
+  f_spec.addEventListener('input', renderPreview);
+  f_svc.addEventListener('input', renderPreview);
+
+  // 儲存
+  save.addEventListener('click', async ()=>{
+    save.disabled = true;
+    const body = {
+      config_id: 1,
+      work_wage_default:       Number(f_work.value || 0),
+      special_wage_default:    Number(f_spec.value || 0),
+      service_points_per_time: Number(f_svc.value  || 0)
+    };
+    const { error } = await adminClient
+      .from('wage_config')
+      .upsert(body, { onConflict:'config_id' });
+
+    save.disabled = false;
+    if (error) {
+      info.textContent = '儲存失敗：' + (error.message || '');
+    } else {
+      info.textContent = '已儲存：' + new Date().toLocaleString('zh-TW',{ timeZone:'Asia/Taipei' });
+      renderPreview();
+    }
+  });
+
+  reload.addEventListener('click', load);
+
+  load();
+}
 
     // ------------------------
     // TAP4：販售道具（含簡介欄）
@@ -899,6 +912,126 @@ function ensureALogin() {
         return tr;
       }
       load();
+    }
+
+    // ------------------------
+    // ✅ TAP7：交易紀錄（獎勵/扣款）
+    // ------------------------
+    async function renderTab7(root){
+      await loadStudentNames();
+
+      const wrap = el('div',{class:'card'});
+      wrap.append(el('div',{class:'row'},[
+        el('strong',{text:'交易紀錄'}), el('span',{class:'chip',text:'transaction_log'})
+      ]));
+
+      // 新增交易
+      const form = el('div',{class:'grid grid-4'});
+      const f_student = makeStudentSelect();
+      const f_action = el('input',{type:'text', placeholder:'行動/說明（可空）'});
+      const f_curr   = el('select'); CURRENCIES.forEach(v=>f_curr.appendChild(el('option',{value:v,text:v})));
+      const f_dir    = el('select'); [{v:'credit',t:'新增(+)'},{v:'debit',t:'扣除(-)'}].forEach(o=>f_dir.appendChild(el('option',{value:o.v,text:o.t})));
+      const f_amt    = el('input',{type:'number', placeholder:'金額', min:1});
+      const f_item   = el('input',{type:'text', placeholder:'項目/來源（可空）'});
+      const addBtn   = el('button',{class:'btn'},[document.createTextNode('新增交易')]);
+      form.append(f_student, f_action, f_curr, f_dir, f_amt, f_item, addBtn);
+
+      // 一覽 + 篩選
+      const filters = el('div',{class:'toolbar'});
+      const ft_student = makeStudentFilterSelect('');
+      const ft_curr = document.createElement('select');
+      const optAll = document.createElement('option'); optAll.value=''; optAll.textContent='（全部幣別）'; ft_curr.appendChild(optAll);
+      CURRENCIES.forEach(v=>ft_curr.appendChild(el('option',{value:v,text:v})));
+      const ft_kw = el('input',{type:'text', placeholder:'搜尋行動/項目…'});
+      const reloadBtn = el('button',{class:'btn secondary small'},[document.createTextNode('重新載入')]);
+      filters.append(reloadBtn, ft_kw, ft_curr, ft_student);
+
+      const tableWrap = el('div',{class:'table-wrap', style:'margin-top:10px'});
+      tableWrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>時間</th><th>學生</th><th>幣別</th><th>變動</th><th>行動</th><th>項目</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>`;
+
+      wrap.append(form, filters, tableWrap);
+      root.append(wrap);
+
+      addBtn.addEventListener('click', async ()=>{
+        const amt = Number(f_amt.value || 0);
+        if (!f_curr.value) { alert('請選幣別'); return; }
+        if (!amt || amt <= 0) { alert('金額需為正數'); return; }
+        addBtn.disabled = true;
+        const body = {
+          student_name: f_student.value,
+          action: f_action.value.trim() || '手動調整',
+          type: f_curr.value,
+          credit: f_dir.value==='credit' ? amt : 0,
+          debit:  f_dir.value==='debit'  ? amt : 0,
+          item: f_item.value || null
+        };
+        const { error } = await adminClient.from('transaction_log').insert(body);
+        addBtn.disabled = false;
+        if (!error) { f_action.value=''; f_item.value=''; f_amt.value=''; await loadTx(); }
+      });
+
+      reloadBtn.addEventListener('click', loadTx);
+      ft_student.addEventListener('change', loadTx);
+      ft_curr.addEventListener('change', loadTx);
+      ft_kw.addEventListener('input', ()=>{
+        // 即時本地過濾：小量資料 OK；大量資料使用 server 端 or() 已在 loadTx 內
+        loadTx();
+      });
+
+      async function loadTx(){
+        let q = adminClient.from('transaction_log').select('*').order('created_at',{ascending:false}).limit(300);
+        if (ft_student.value) q = q.eq('student_name', ft_student.value);
+        if (ft_curr.value)    q = q.eq('type', ft_curr.value);
+        const kw = (ft_kw.value||'').trim();
+        if (kw) {
+          // server 端簡單搜尋：action 或 item
+          q = q.or(`action.ilike.%${kw}%,item.ilike.%${kw}%`);
+        }
+        const { data, error } = await q;
+        const tb = $('#txBody'); tb.innerHTML='';
+        if (error) { tb.innerHTML = `<tr><td colspan="7" class="err">讀取錯誤：${error.message}</td></tr>`; return; }
+        (data||[]).forEach(r=>tb.appendChild(txRow(r)));
+      }
+
+      function txRow(r){
+        const tr = document.createElement('tr');
+        const delta = (r.credit||0) - (r.debit||0);
+        const deltSpan = document.createElement('span');
+        deltSpan.className = 'delta ' + (delta>=0 ? 'plus' : 'minus');
+        deltSpan.textContent = (delta>=0? '+' : '') + String(delta);
+
+        const delBtn = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+
+        tr.innerHTML = `
+          <td>${fmtTime(r.created_at)}</td>
+          <td>${r.student_name}</td>
+          <td>${r.type}</td>
+          <td></td>
+          <td>${r.action||''}</td>
+          <td>${r.item||''}</td>
+          <td></td>
+        `;
+        tr.children[3].appendChild(deltSpan);
+        tr.children[6].appendChild(delBtn);
+
+        delBtn.addEventListener('click', async ()=>{
+          if (!confirm('確定刪除此筆交易？')) return;
+          const { error } = await adminClient.from('transaction_log').delete().eq('id', r.id);
+          if (!error) tr.remove();
+        });
+
+        return tr;
+      }
+
+      loadTx();
     }
 
     // ------------------------
