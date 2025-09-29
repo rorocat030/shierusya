@@ -628,15 +628,15 @@
       loadAreas();
     }
 
- // ------------------------
+// ------------------------
 // TAP3：倍率管理（earn_current_rate）
-// 表：earn_current_rate(kind PK, rate, currency, updated_at)
-// 我們維護三筆 kind：work(一般打工)、special(特殊打工)、service(愛校服務)
+// kind 僅三筆：work(一般打工/每小時)、special(特殊打工/每小時)、service(愛校服務/每次)
+// placeholder 會顯示「目前：<倍率>（<幣別>）」
 // ------------------------
 const RATE_KINDS = [
-  { kind: 'work',    label: '一般打工（每小時）',   currency: '一般貨幣' },
-  { kind: 'special', label: '特殊打工（每小時）',   currency: '謝爾夏貨幣' },
-  { kind: 'service', label: '愛校服務（每次）',     currency: '愛校點數' },
+  { kind: 'work',    label: '一般打工（每小時）', currency: '一般貨幣' },
+  { kind: 'special', label: '特殊打工（每小時）', currency: '謝爾夏貨幣' },
+  { kind: 'service', label: '愛校服務（每次）',   currency: '愛校點數' },
 ];
 
 async function renderTab3(root){
@@ -644,17 +644,20 @@ async function renderTab3(root){
   wrap.append(
     el('div',{class:'row'},[
       el('strong',{text:'倍率管理'}),
-      el('span',{class:'chip',text:'earn_current_rate（3 筆 by kind）'})
+      el('span',{class:'chip',text:'earn_current_rate（每種僅一筆）'})
     ])
   );
 
-  // 動態建立 3 行輸入
   const grid = el('div',{class:'grid grid-3'});
   const fields = new Map(); // kind -> input
+
   RATE_KINDS.forEach(k => {
-    const box = el('div',{class:'card'});
+    const box   = el('div',{class:'card'});
     const title = el('div',{class:'muted', text:`${k.label} → ${k.currency}`});
-    const input = el('input',{type:'number', min:0, placeholder:`輸入 ${k.currency} 數值`});
+    const input = el('input',{
+      type:'number', min:0,
+      placeholder:'讀取目前倍率中…' // 先放暫時字樣，load() 後改成「目前：x（幣別）」
+    });
     fields.set(k.kind, input);
     box.append(title, input);
     grid.append(box);
@@ -672,11 +675,17 @@ async function renderTab3(root){
       .select('*'); // kind, rate, currency, updated_at
     if (error) { info.textContent = '讀取失敗：'+(error.message||''); return; }
 
-    // 以 kind 映射到欄位
     const map = new Map((data||[]).map(r=>[r.kind, r]));
     RATE_KINDS.forEach(k=>{
       const got = map.get(k.kind);
-      fields.get(k.kind).value = (got?.rate ?? '');
+      const input = fields.get(k.kind);
+
+      // 讓 placeholder 顯示目前倍率；輸入值留空，方便直接輸入新數字
+      const rateNow = (got && Number.isFinite(+got.rate)) ? Number(got.rate) : null;
+      input.value = ''; // 清空，讓 placeholder 出現
+      input.placeholder = rateNow!=null
+        ? `目前：${rateNow}（${k.currency}）`
+        : `目前：尚未設定（${k.currency}）`;
     });
 
     const latest = (data||[]).reduce((m,r)=> Math.max(m, new Date(r.updated_at||0).getTime()), 0);
@@ -685,17 +694,18 @@ async function renderTab3(root){
 
   save.addEventListener('click', async ()=>{
     save.disabled = true;
-    // 準備 3 筆 upsert
     const rows = RATE_KINDS.map(k => ({
       kind: k.kind,
       rate: Number(fields.get(k.kind).value || 0),
-      currency: k.currency // ★ 直接寫入你的幣別中文（和現有 schema 一致）
+      currency: k.currency
     }));
     const { error } = await adminClient
       .from('earn_current_rate')
-      .upsert(rows, { onConflict: 'kind' }); // PK = kind
+      .upsert(rows, { onConflict: 'kind' });
     save.disabled = false;
-    info.textContent = error ? ('儲存失敗：'+(error.message||'')) : ('已儲存：'+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}));
+    info.textContent = error
+      ? ('儲存失敗：'+(error.message||''))
+      : ('已儲存：'+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}));
     if (!error) load();
   });
 
