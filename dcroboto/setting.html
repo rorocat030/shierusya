@@ -662,9 +662,7 @@ async function renderTab3(root){
   const help = el('div',{class:'help'});
   help.innerHTML = `
     <ul style="margin:8px 0 0 18px; padding:0;">
-      <li>此頁只維護 <b>一筆</b> 倍率（config_id=1）。</li>
       <li>一般打工：每小時給 <b>一般貨幣</b>；特殊打工：每小時給 <b>謝爾夏貨幣</b>；愛校服務：每次給 <b>愛校點數</b>。</li>
-      <li>你之後的新「累積桶」會依「幣別＋當時倍率」分桶累加；若你把一般打工從 100 調成 150，系統會開始往「一般貨幣/150」那桶累積；若再調回 100，會回到「一般貨幣/100」那桶繼續累積。</li>
     </ul>
   `;
   const preview = el('div',{class:'card', style:'margin-top:8px'});
