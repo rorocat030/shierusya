@@ -628,107 +628,81 @@
       loadAreas();
     }
 
-   // ------------------------
-// TAP3：倍率管理（單筆配置）
-// - 一般打工：每小時給的一般貨幣 work_wage_default
-// - 特殊打工：每小時給的謝爾夏貨幣 special_wage_default
-// - 愛校服務：每次給的點數 service_points_per_time
-// 備註：資料表 earn_current_rate 僅用 config_id=1 那一列
+ // ------------------------
+// TAP3：倍率管理（earn_current_rate）
+// 表：earn_current_rate(kind PK, rate, currency, updated_at)
+// 我們維護三筆 kind：work(一般打工)、special(特殊打工)、service(愛校服務)
 // ------------------------
+const RATE_KINDS = [
+  { kind: 'work',    label: '一般打工（每小時）',   currency: '一般貨幣' },
+  { kind: 'special', label: '特殊打工（每小時）',   currency: '謝爾夏貨幣' },
+  { kind: 'service', label: '愛校服務（每次）',     currency: '愛校點數' },
+];
+
 async function renderTab3(root){
   const wrap = el('div',{class:'card'});
+  wrap.append(
+    el('div',{class:'row'},[
+      el('strong',{text:'倍率管理'}),
+      el('span',{class:'chip',text:'earn_current_rate（3 筆 by kind）'})
+    ])
+  );
 
-  // 欄位
-  const f_work = el('input',{type:'number', placeholder:'一般打工｜每小時 → 一般貨幣（例：100）', min:0});
-  const f_spec = el('input',{type:'number', placeholder:'特殊打工｜每小時 → 謝爾夏貨幣（例：5）', min:0});
-  const f_svc  = el('input',{type:'number', placeholder:'愛校服務｜每次 → 愛校點數（例：1）', min:0});
+  // 動態建立 3 行輸入
+  const grid = el('div',{class:'grid grid-3'});
+  const fields = new Map(); // kind -> input
+  RATE_KINDS.forEach(k => {
+    const box = el('div',{class:'card'});
+    const title = el('div',{class:'muted', text:`${k.label} → ${k.currency}`});
+    const input = el('input',{type:'number', min:0, placeholder:`輸入 ${k.currency} 數值`});
+    fields.set(k.kind, input);
+    box.append(title, input);
+    grid.append(box);
+  });
 
   const save = el('button',{class:'btn'},[document.createTextNode('儲存倍率')]);
   const reload = el('button',{class:'btn secondary'},[document.createTextNode('重新載入')]);
   const info = el('span',{class:'muted'});
-
-  wrap.append(
-    el('div',{class:'row'},[
-      el('strong',{text:'倍率管理'}),
-      el('span',{class:'chip',text:'earn_current_rate（單筆：config_id=1）'})
-    ])
-  );
-
-  const grid = el('div',{class:'grid grid-4'});
-  grid.append(f_work, f_spec, f_svc, save, reload);
-  wrap.append(grid);
-
-  // 說明 + 預覽
-  const help = el('div',{class:'help'});
-  help.innerHTML = `
-    <ul style="margin:8px 0 0 18px; padding:0;">
-      <li>一般打工：每小時給 <b>一般貨幣</b>；特殊打工：每小時給 <b>謝爾夏貨幣</b>；愛校服務：每次給 <b>愛校點數</b>。</li>
-    </ul>
-  `;
-  const preview = el('div',{class:'card', style:'margin-top:8px'});
-  const pvText = el('div',{class:'muted'});
-  preview.append(el('div',{text:'目前設定（預覽）'}), pvText);
-
-  wrap.append(help, preview, info);
+  wrap.append(grid, el('div',{class:'row'},[save, reload, info]));
   root.append(wrap);
 
-  // 載入
   async function load(){
     const { data, error } = await adminClient
       .from('earn_current_rate')
-      .select('work_wage_default, special_wage_default, service_points_per_time, updated_at')
-      .eq('config_id', 1)
-      .maybeSingle();
+      .select('*'); // kind, rate, currency, updated_at
+    if (error) { info.textContent = '讀取失敗：'+(error.message||''); return; }
 
-    if (error) {
-      info.textContent = '讀取失敗：' + (error.message || '');
-      return;
-    }
-    // 沒有資料就視為 0，顯示空字串比較好編
-    f_work.value = data?.work_wage_default ?? '';
-    f_spec.value = data?.special_wage_default ?? '';
-    f_svc.value  = data?.service_points_per_time ?? '';
-    info.textContent = data?.updated_at ? ('最後更新：' + fmtTime(data.updated_at)) : '尚未建立設定（請儲存一次）';
-    renderPreview();
+    // 以 kind 映射到欄位
+    const map = new Map((data||[]).map(r=>[r.kind, r]));
+    RATE_KINDS.forEach(k=>{
+      const got = map.get(k.kind);
+      fields.get(k.kind).value = (got?.rate ?? '');
+    });
+
+    const latest = (data||[]).reduce((m,r)=> Math.max(m, new Date(r.updated_at||0).getTime()), 0);
+    info.textContent = latest ? ('最後更新：'+fmtTime(latest)) : '尚未建立（請儲存一次）';
   }
 
-  function renderPreview(){
-    const w = Number(f_work.value || 0);
-    const s = Number(f_spec.value || 0);
-    const p = Number(f_svc.value || 0);
-    pvText.textContent = `一般打工：每小時 +${w} 一般貨幣；特殊打工：每小時 +${s} 謝爾夏貨幣；愛校服務：每次 +${p} 愛校點數`;
-  }
-
-  f_work.addEventListener('input', renderPreview);
-  f_spec.addEventListener('input', renderPreview);
-  f_svc.addEventListener('input', renderPreview);
-
-  // 儲存
   save.addEventListener('click', async ()=>{
     save.disabled = true;
-    const body = {
-      config_id: 1,
-      work_wage_default:       Number(f_work.value || 0),
-      special_wage_default:    Number(f_spec.value || 0),
-      service_points_per_time: Number(f_svc.value  || 0)
-    };
+    // 準備 3 筆 upsert
+    const rows = RATE_KINDS.map(k => ({
+      kind: k.kind,
+      rate: Number(fields.get(k.kind).value || 0),
+      currency: k.currency // ★ 直接寫入你的幣別中文（和現有 schema 一致）
+    }));
     const { error } = await adminClient
       .from('earn_current_rate')
-      .upsert(body, { onConflict:'config_id' });
-
+      .upsert(rows, { onConflict: 'kind' }); // PK = kind
     save.disabled = false;
-    if (error) {
-      info.textContent = '儲存失敗：' + (error.message || '');
-    } else {
-      info.textContent = '已儲存：' + new Date().toLocaleString('zh-TW',{ timeZone:'Asia/Taipei' });
-      renderPreview();
-    }
+    info.textContent = error ? ('儲存失敗：'+(error.message||'')) : ('已儲存：'+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}));
+    if (!error) load();
   });
 
   reload.addEventListener('click', load);
-
   load();
 }
+
 
     // ------------------------
     // TAP4：販售道具（含簡介欄）
@@ -912,125 +886,115 @@ async function renderTab3(root){
       load();
     }
 
-    // ------------------------
-    // ✅ TAP7：交易紀錄（獎勵/扣款）
-    // ------------------------
-    async function renderTab7(root){
-      await loadStudentNames();
+   // ------------------------
+// TAP7：交易紀錄（transaction_log）
+// 欄位：student_name, action(文字), type(幣別), debit, credit, item(可空), created_at
+// UI：下拉學生 / 動作說明 / 幣別 / 入帳或扣款 / 金額 / 物品(可空)
+// ------------------------
+async function renderTab7(root){
+  await loadStudentNames();
 
-      const wrap = el('div',{class:'card'});
-      wrap.append(el('div',{class:'row'},[
-        el('strong',{text:'交易紀錄'}), el('span',{class:'chip',text:'transaction_log'})
-      ]));
+  const wrap = el('div',{class:'card'});
+  wrap.append(el('div',{class:'row'},[
+    el('strong',{text:'交易紀錄'}),
+    el('span',{class:'chip',text:'transaction_log'})
+  ]));
 
-      // 新增交易
-      const form = el('div',{class:'grid grid-4'});
-      const f_student = makeStudentSelect();
-      const f_action = el('input',{type:'text', placeholder:'行動/說明（可空）'});
-      const f_curr   = el('select'); CURRENCIES.forEach(v=>f_curr.appendChild(el('option',{value:v,text:v})));
-      const f_dir    = el('select'); [{v:'credit',t:'新增(+)'},{v:'debit',t:'扣除(-)'}].forEach(o=>f_dir.appendChild(el('option',{value:o.v,text:o.t})));
-      const f_amt    = el('input',{type:'number', placeholder:'金額', min:1});
-      const f_item   = el('input',{type:'text', placeholder:'項目/來源（可空）'});
-      const addBtn   = el('button',{class:'btn'},[document.createTextNode('新增交易')]);
-      form.append(f_student, f_action, f_curr, f_dir, f_amt, f_item, addBtn);
+  const f = el('div',{class:'grid grid-4'});
 
-      // 一覽 + 篩選
-      const filters = el('div',{class:'toolbar'});
-      const ft_student = makeStudentFilterSelect('');
-      const ft_curr = document.createElement('select');
-      const optAll = document.createElement('option'); optAll.value=''; optAll.textContent='（全部幣別）'; ft_curr.appendChild(optAll);
-      CURRENCIES.forEach(v=>ft_curr.appendChild(el('option',{value:v,text:v})));
-      const ft_kw = el('input',{type:'text', placeholder:'搜尋行動/項目…'});
-      const reloadBtn = el('button',{class:'btn secondary small'},[document.createTextNode('重新載入')]);
-      filters.append(reloadBtn, ft_kw, ft_curr, ft_student);
+  const f_student = makeStudentSelect();
+  const f_action  = el('input',{type:'text', placeholder:'動作說明（例如：活動獎勵／手動調整）'});
+  const f_type    = el('select');            // 幣別
+  ['一般貨幣','謝爾夏貨幣','愛校點數'].forEach(v=>{
+    f_type.appendChild(el('option',{value:v, text:v}));
+  });
 
-      const tableWrap = el('div',{class:'table-wrap', style:'margin-top:10px'});
-      tableWrap.innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>時間</th><th>學生</th><th>幣別</th><th>變動</th><th>行動</th><th>項目</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="txBody"></tbody>
-        </table>`;
+  const f_mode    = el('select');            // 入帳/扣款
+  [['credit','入帳（加）'],['debit','扣款（減）']].forEach(([v,t])=>{
+    f_mode.appendChild(el('option',{value:v, text:t}));
+  });
 
-      wrap.append(form, filters, tableWrap);
-      root.append(wrap);
+  const f_amount  = el('input',{type:'number', min:0, placeholder:'金額/點數'});
+  const f_item    = el('input',{type:'text', placeholder:'關聯物品（可空）'});
 
-      addBtn.addEventListener('click', async ()=>{
-        const amt = Number(f_amt.value || 0);
-        if (!f_curr.value) { alert('請選幣別'); return; }
-        if (!amt || amt <= 0) { alert('金額需為正數'); return; }
-        addBtn.disabled = true;
-        const body = {
-          student_name: f_student.value,
-          action: f_action.value.trim() || '手動調整',
-          type: f_curr.value,
-          credit: f_dir.value==='credit' ? amt : 0,
-          debit:  f_dir.value==='debit'  ? amt : 0,
-          item: f_item.value || null
-        };
-        const { error } = await adminClient.from('transaction_log').insert(body);
-        addBtn.disabled = false;
-        if (!error) { f_action.value=''; f_item.value=''; f_amt.value=''; await loadTx(); }
-      });
+  const add = el('button',{class:'btn'},[document.createTextNode('新增交易')]);
+  f.append(f_student, f_action, f_type, f_mode, f_amount, f_item, add);
 
-      reloadBtn.addEventListener('click', loadTx);
-      ft_student.addEventListener('change', loadTx);
-      ft_curr.addEventListener('change', loadTx);
-      ft_kw.addEventListener('input', ()=>{
-        // 即時本地過濾：小量資料 OK；大量資料使用 server 端 or() 已在 loadTx 內
-        loadTx();
-      });
+  const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
+  list.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>時間</th><th>學生</th><th>幣別</th>
+          <th>入帳</th><th>扣款</th><th>動作</th><th>物品</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="txnBody"></tbody>
+    </table>`;
+  wrap.append(f, list);
+  root.append(wrap);
 
-      async function loadTx(){
-        let q = adminClient.from('transaction_log').select('*').order('created_at',{ascending:false}).limit(300);
-        if (ft_student.value) q = q.eq('student_name', ft_student.value);
-        if (ft_curr.value)    q = q.eq('type', ft_curr.value);
-        const kw = (ft_kw.value||'').trim();
-        if (kw) {
-          // server 端簡單搜尋：action 或 item
-          q = q.or(`action.ilike.%${kw}%,item.ilike.%${kw}%`);
-        }
-        const { data, error } = await q;
-        const tb = $('#txBody'); tb.innerHTML='';
-        if (error) { tb.innerHTML = `<tr><td colspan="7" class="err">讀取錯誤：${error.message}</td></tr>`; return; }
-        (data||[]).forEach(r=>tb.appendChild(txRow(r)));
-      }
-
-      function txRow(r){
-        const tr = document.createElement('tr');
-        const delta = (r.credit||0) - (r.debit||0);
-        const deltSpan = document.createElement('span');
-        deltSpan.className = 'delta ' + (delta>=0 ? 'plus' : 'minus');
-        deltSpan.textContent = (delta>=0? '+' : '') + String(delta);
-
-        const delBtn = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
-
-        tr.innerHTML = `
-          <td>${fmtTime(r.created_at)}</td>
-          <td>${r.student_name}</td>
-          <td>${r.type}</td>
-          <td></td>
-          <td>${r.action||''}</td>
-          <td>${r.item||''}</td>
-          <td></td>
-        `;
-        tr.children[3].appendChild(deltSpan);
-        tr.children[6].appendChild(delBtn);
-
-        delBtn.addEventListener('click', async ()=>{
-          if (!confirm('確定刪除此筆交易？')) return;
-          const { error } = await adminClient.from('transaction_log').delete().eq('id', r.id);
-          if (!error) tr.remove();
-        });
-
-        return tr;
-      }
-
-      loadTx();
+  add.addEventListener('click', async ()=>{
+    add.disabled = true;
+    const amt = Math.max(0, Number(f_amount.value || 0));
+    const body = {
+      student_name: f_student.value,
+      action: (f_action.value || '').trim() || '手動調整',
+      type: f_type.value,          // ★ 對應你的欄位名：type
+      debit:  f_mode.value==='debit'  ? amt : 0,
+      credit: f_mode.value==='credit' ? amt : 0,
+      item: f_item.value || null
+    };
+    const { error } = await adminClient.from('transaction_log').insert(body);
+    add.disabled = false;
+    if (!error) {
+      f_action.value=''; f_amount.value=''; f_item.value='';
+      load();
     }
+  });
+
+  async function load(){
+    const { data, error } = await adminClient
+      .from('transaction_log')
+      .select('id, student_name, action, type, debit, credit, item, created_at')
+      .order('created_at',{ascending:false})
+      .limit(200);
+    const tb = $('#txnBody'); tb.innerHTML='';
+    if (error) {
+      tb.innerHTML = `<tr><td colspan="8" class="err">讀取失敗：${error.message}</td></tr>`;
+      return;
+    }
+    (data||[]).forEach(r=>tb.appendChild(row(r)));
+  }
+
+  function row(r){
+    const tr = document.createElement('tr');
+    const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+
+    tr.innerHTML = `
+      <td>${fmtTime(r.created_at)}</td>
+      <td>${r.student_name}</td>
+      <td>${r.type}</td>
+      <td>${r.credit||0}</td>
+      <td>${r.debit||0}</td>
+      <td>${r.action||''}</td>
+      <td>${r.item||''}</td>
+    `;
+    const tdBtn = document.createElement('td');
+    tdBtn.append(del);
+    tr.appendChild(tdBtn);
+
+    del.addEventListener('click', async ()=>{
+      if (!confirm('確定刪除這筆交易？')) return;
+      const { error } = await adminClient.from('transaction_log').delete().eq('id', r.id);
+      if (!error) tr.remove();
+    });
+    return tr;
+  }
+
+  load();
+}
+
 
     // ------------------------
     // 初始化
