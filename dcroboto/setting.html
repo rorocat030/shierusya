@@ -246,6 +246,118 @@
       }, 500);
     }
 
+// ===== A 專案登入彈窗：若不存在就動態建立 =====
+function ensureALoginDOM() {
+  if (document.getElementById('aLoginMask')) return; // 已存在
+
+  // 加入基本樣式（若你已經有這些 CSS 可以刪掉這段）
+  if (!document.getElementById('aLoginModalStyles')) {
+    const style = document.createElement('style');
+    style.id = 'aLoginModalStyles';
+    style.textContent = `
+      .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9999}
+      .modal{width:min(420px,92vw);background:#fff;border-radius:12px;padding:16px;box-shadow:0 12px 32px rgba(0,0,0,.2);position:relative}
+      .modal h3{margin:0 0 8px 0;font-size:18px}
+      .modal .field{margin:8px 0;display:flex;flex-direction:column;gap:6px}
+      .modal .row{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+      .modal .msg{font-size:12px;color:#5a728f;min-height:1.2em;margin-right:auto}
+      .modal .close-x{position:absolute;right:12px;top:8px;cursor:pointer;color:#5a728f}
+      .modal input{padding:8px 6px;border:1px solid #d7e3ef;border-radius:8px}
+      .btn{border:none;background:#1767a0;color:#fff;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}
+      .btn.secondary{background:#e9f1f9;color:#143158}
+    `;
+    document.head.appendChild(style);
+  }
+
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div id="aLoginMask" class="modal-mask" aria-hidden="false">
+      <div class="modal">
+        <div class="close-x" id="aLoginClose">✕</div>
+        <h3>登入 A 專案（wfhwhvodgikpducrhgda）</h3>
+        <div class="field">
+          <label>電子郵件</label>
+          <input id="aEmail" type="text" placeholder="you@example.com" />
+        </div>
+        <div class="field">
+          <label>密碼</label>
+          <input id="aPassword" type="password" placeholder="••••••••" />
+        </div>
+        <div class="row">
+          <span class="msg" id="aLoginMsg"></span>
+          <button class="btn secondary" id="aLoginCancel">取消</button>
+          <button class="btn" id="aLoginDo">登入</button>
+        </div>
+      </div>
+    </div>
+  `.trim();
+  document.body.appendChild(wrap.firstElementChild);
+
+  // 綁定事件（因為是動態插入，這邊一次綁定）
+  document.getElementById('aLoginClose').addEventListener('click', closeALoginModal);
+  document.getElementById('aLoginCancel').addEventListener('click', closeALoginModal);
+  document.getElementById('aLoginDo').addEventListener('click', doALogin);
+}
+
+function openALoginModal() {
+  ensureALoginDOM();                       // ☆ 保證 DOM 存在
+  const mask = document.getElementById('aLoginMask');
+  const msg  = document.getElementById('aLoginMsg');
+  const mail = document.getElementById('aEmail');
+  const pwd  = document.getElementById('aPassword');
+  if (msg) msg.textContent = '';
+  if (mail) mail.value = '';
+  if (pwd)  pwd.value = '';
+  if (mask) { mask.style.display = 'flex'; mask.setAttribute('aria-hidden', 'false'); }
+  setTimeout(() => mail && mail.focus(), 0);
+}
+
+function closeALoginModal() {
+  const mask = document.getElementById('aLoginMask');
+  if (mask) { mask.style.display = 'none'; mask.setAttribute('aria-hidden', 'true'); }
+}
+
+// 進行 A 專案登入；成功後關窗並回呼 __afterALogin（若有）
+async function doALogin(){
+  const msg = document.getElementById('aLoginMsg');
+  const email = (document.getElementById('aEmail')?.value || '').trim();
+  const password = document.getElementById('aPassword')?.value || '';
+  if (msg) msg.textContent = '登入中…';
+  const { error } = await aClient.auth.signInWithPassword({ email, password });
+  if (error) {
+    if (msg) msg.textContent = '登入失敗：' + (error.message || '');
+    return;
+  }
+  if (msg) msg.textContent = '登入成功';
+  setTimeout(() => {
+    closeALoginModal();
+    if (window.__afterALogin) { try { window.__afterALogin(); } catch(_){} }
+  }, 400);
+}
+
+// 檢查 A 是否已登入；未登入 → 開彈窗；登入後 resolve(true)，取消則 resolve(false)
+function ensureALogin() {
+  return new Promise(async (resolve) => {
+    const u = await aClient.auth.getUser();
+    if (u?.data?.user) return resolve(true);
+    openALoginModal();
+    // 登入成功時呼叫
+    window.__afterALogin = () => resolve(true);
+    // 取消時回傳 false
+    const onCancel = () => resolve(false);
+    // 因為按鈕是動態建立，這裡取得當前節點再綁一次（若尚未建立 DOM 會由 openALoginModal 建立）
+    const bindCancelOnce = () => {
+      const cancel = document.getElementById('aLoginCancel');
+      const closeX = document.getElementById('aLoginClose');
+      if (cancel) cancel.addEventListener('click', onCancel, { once:true });
+      if (closeX) closeX.addEventListener('click', onCancel, { once:true });
+    };
+    // 如果此刻 DOM 尚未 ready，稍微延後綁定
+    setTimeout(bindCancelOnce, 0);
+  });
+}
+
+
     // 確保 A 專案已登入；未登入則彈窗，完成後 resolve(true)，取消關閉則 resolve(false)
     function ensureALogin() {
       return new Promise(async (resolve) => {
