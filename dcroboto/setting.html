@@ -629,22 +629,17 @@
     }
 
 // ------------------------
-// TAP3：倍率管理（改用 earn_current_rate 表）
-// - 三列（以 kind 當 PK）：work / special / service
-// - rate：每小時/每次給多少；currency：該 kind 的幣別
+// TAP3：倍率管理（改用 earn_current_rate）
+// 表結構：earn_current_rate(kind PRIMARY KEY, rate int, currency enum, updated_at)
+// 三組：一般打工→一般貨幣；特殊打工→謝爾夏貨幣；愛校服務→愛校點數
 // ------------------------
 async function renderTab3(root){
-  // 若你的 kind enum 不是這三個值，請改成實際 enum 值
-  const KIND_WORK = 'work';
-  const KIND_SPEC = 'special';
-  const KIND_SVC  = 'service';
-
   const wrap = el('div',{class:'card'});
 
-  // 欄位
-  const f_work = el('input',{type:'number', placeholder:'一般打工｜每小時 → 一般貨幣（例：100）', min:0});
-  const f_spec = el('input',{type:'number', placeholder:'特殊打工｜每小時 → 謝爾夏貨幣（例：5）', min:0});
-  const f_svc  = el('input',{type:'number', placeholder:'愛校服務｜每次 → 愛校點數（例：1）', min:0});
+  // 三個輸入框
+  const f_work = el('input',{type:'number', min:0, placeholder:'一般打工｜每小時 → 一般貨幣（例：100）'});
+  const f_spec = el('input',{type:'number', min:0, placeholder:'特殊打工｜每小時 → 謝爾夏貨幣（例：5）'});
+  const f_svc  = el('input',{type:'number', min:0, placeholder:'愛校服務｜每次 → 愛校點數（例：1）'});
 
   const save = el('button',{class:'btn'},[document.createTextNode('儲存倍率')]);
   const reload = el('button',{class:'btn secondary'},[document.createTextNode('重新載入')]);
@@ -653,7 +648,7 @@ async function renderTab3(root){
   wrap.append(
     el('div',{class:'row'},[
       el('strong',{text:'倍率管理'}),
-      el('span',{class:'chip',text:'earn_current_rate'})
+      el('span',{class:'chip',text:'earn_current_rate（每種 kind 一行）'})
     ])
   );
 
@@ -663,65 +658,85 @@ async function renderTab3(root){
 
   const help = el('div',{class:'help'});
   help.innerHTML = `
-    <ul style="margin:8px 0 0 18px; padding:0;">
-      <li><b>一般打工</b>（${KIND_WORK}）：每小時 → <b>一般貨幣</b></li>
-      <li><b>特殊打工</b>（${KIND_SPEC}）：每小時 → <b>謝爾夏貨幣</b></li>
-      <li><b>愛校服務</b>（${KIND_SVC}）：每次 → <b>愛校點數</b></li>
+    <ul style="margin:8px 0 0 18px;">
+      <li>一般打工：每小時給 <b>一般貨幣</b>；特殊打工：每小時給 <b>謝爾夏貨幣</b>；愛校服務：每次給 <b>愛校點數</b>。</li>
+      <li>後續「累積桶」會依「幣別＋當時倍率」分桶累加，切換倍率就切到相符的桶。</li>
     </ul>
   `;
-
-  wrap.append(help, preview, info);
+  wrap.append(help, info);
   root.append(wrap);
 
-  function renderPreview(){
-    const w = Number(f_work.value || 0);
-    const s = Number(f_spec.value || 0);
-    const p = Number(f_svc.value || 0);
-    pvText.textContent = `一般打工：每小時 +${w} 一般貨幣；特殊打工：每小時 +${s} 謝爾夏貨幣；愛校服務：每次 +${p} 愛校點數`;
+  // 幣別文字（要跟資料庫 enum 對得上）
+  const CUR = {
+    work:   '一般貨幣',
+    special:'謝爾夏貨幣',
+    service:'愛校點數'
+  };
+
+  // 讀到的現有 kind（避免你 enum 寫法不同而 upsert 失敗）
+  const existingKind = { work:null, special:null, service:null };
+
+  function renderPreviewText(){
+    const w = Number(f_work.value||0),
+          s = Number(f_spec.value||0),
+          p = Number(f_svc.value||0);
+    info.textContent =
+      `一般打工：+${w} ${CUR.work}／h；`+
+      `特殊打工：+${s} ${CUR.special}／h；`+
+      `愛校服務：+${p} ${CUR.service}／次`;
   }
 
-  f_work.addEventListener('input', renderPreview);
-  f_spec.addEventListener('input', renderPreview);
-  f_svc.addEventListener('input', renderPreview);
-
-  // 讀取（把三筆 kind 填入欄位；若沒資料就顯示空白）
   async function load(){
+    // 讀整張表，嘗試配對到三組
     const { data, error } = await adminClient
       .from('earn_current_rate')
       .select('kind, rate, currency, updated_at');
 
-    if (error) { info.textContent = '讀取失敗：' + (error.message || ''); return; }
+    if (error) {
+      info.textContent = '讀取失敗：' + (error.message || '');
+      return;
+    }
 
-    // 轉小寫來對應
-    const byKind = {};
-    (data || []).forEach(r => { byKind[String(r.kind).toLowerCase()] = r; });
+    // 先清空
+    f_work.value = ''; f_spec.value=''; f_svc.value=''; 
+    existingKind.work = existingKind.special = existingKind.service = null;
 
-    // 優先用 kind 對應；若 kind 不符，退而求其次用 currency 對應
-    const findByCurrency = (c) => (data || []).find(r => r.currency === c);
+    // 嘗試用 kind 或 currency 對應到三組
+    (data||[]).forEach(r => {
+      const k = String(r.kind || '').toLowerCase();
+      const cur = String(r.currency || '');
+      if (k === 'work' || cur === CUR.work) {
+        f_work.value = r.rate;
+        existingKind.work = r.kind; // 保留原樣
+      } else if (k === 'special' || cur === CUR.special) {
+        f_spec.value = r.rate;
+        existingKind.special = r.kind;
+      } else if (k === 'service' || cur === CUR.service) {
+        f_svc.value = r.rate;
+        existingKind.service = r.kind;
+      }
+    });
 
-    const rWork = byKind[KIND_WORK] || findByCurrency('一般貨幣');
-    const rSpec = byKind[KIND_SPEC] || findByCurrency('謝爾夏貨幣');
-    const rSvc  = byKind[KIND_SVC]  || findByCurrency('愛校點數');
+    // 若表本來是空的，就給個預設顯示 0，存檔時會 upsert 三行
+    if (f_work.value === '') f_work.value = 0;
+    if (f_spec.value === '') f_spec.value = 0;
+    if (f_svc.value  === '') f_svc.value  = 0;
 
-    f_work.value = rWork?.rate ?? '';
-    f_spec.value = rSpec?.rate ?? '';
-    f_svc.value  = rSvc?.rate  ?? '';
-
-    // 顯示最近一次更新時間（取最大）
-    const maxUpd = (data||[]).reduce((m,r)=> Math.max(m, r.updated_at ? new Date(r.updated_at).getTime() : 0), 0);
-    info.textContent = maxUpd ? ('最後更新：' + fmtTime(new Date(maxUpd))) : '尚未建立設定（請儲存一次）';
-
-    renderPreview();
+    renderPreviewText();
   }
 
-  // 儲存（三筆 upsert，onConflict: kind）
+  f_work.addEventListener('input', renderPreviewText);
+  f_spec.addEventListener('input', renderPreviewText);
+  f_svc.addEventListener('input',  renderPreviewText);
+
+  // 儲存：沿用既有 kind 值；如果不存在，預設使用 'work'/'special'/'service'
   save.addEventListener('click', async ()=>{
     save.disabled = true;
 
     const rows = [
-      { kind: KIND_WORK, rate: Number(f_work.value || 0), currency: '一般貨幣' },
-      { kind: KIND_SPEC, rate: Number(f_spec.value || 0), currency: '謝爾夏貨幣' },
-      { kind: KIND_SVC,  rate: Number(f_svc .value || 0), currency: '愛校點數' },
+      { kind: existingKind.work    || 'work',    rate: Number(f_work.value||0), currency: CUR.work    },
+      { kind: existingKind.special || 'special', rate: Number(f_spec.value||0), currency: CUR.special },
+      { kind: existingKind.service || 'service', rate: Number(f_svc.value ||0), currency: CUR.service }
     ];
 
     const { error } = await adminClient
@@ -731,18 +746,19 @@ async function renderTab3(root){
     save.disabled = false;
 
     if (error) {
-      info.textContent = '儲存失敗：' + (error.message || '');
-    } else {
-      info.textContent = '已儲存：' + new Date().toLocaleString('zh-TW',{ timeZone:'Asia/Taipei' });
-      renderPreview();
+      // 如果是 enum 不相容，直接把錯誤顯示出來，方便你調 enum
+      info.textContent = '儲存失敗（可能是 enum 不相容）：' + (error.message || '');
+      return;
     }
+
+    info.textContent = '已儲存：' + new Date().toLocaleString('zh-TW', { timeZone:'Asia/Taipei' });
+    // 重新抓一次，更新 existingKind 與畫面
+    load();
   });
 
   reload.addEventListener('click', load);
-
   load();
 }
-
 
 
     // ------------------------
