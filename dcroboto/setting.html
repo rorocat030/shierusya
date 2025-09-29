@@ -2,832 +2,569 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>謝爾夏｜管理後台</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://fonts.googleapis.com/css?family=Noto+Sans+TC:400,700&display=swap" rel="stylesheet" />
   <style>
-    :root{ --name-w:auto; }
-    *{ box-sizing:border-box; }
-    body{
-      font-family:'Noto Sans TC',sans-serif;
-      margin:0; padding:2rem;
-      background:#f3f7fc;
-    }
-    .container{
-      max-width:1200px; margin:auto; background:#fff;
-      border-radius:14px; box-shadow:0 8px 24px #0000000d;
-      padding:1.25rem 1.25rem 2rem;
-    }
-    h1{ margin:0 0 .5rem; color:#143158; text-align:center; }
-    .hr{ height:4px; width:80%; margin:.5rem auto 1rem; background:#1767a0; border-radius:2px; }
+    :root { --name-w: auto; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Noto Sans TC', sans-serif; background:#f3f7fb; margin:0; min-height:100vh; color:#143158; }
+    a { color:#1767a0; text-decoration:none; }
+    .container { max-width: 1200px; margin: 32px auto; background: #fff; padding: 18px; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+    h1 { margin: 0 0 6px 0; font-size: 22px; letter-spacing: .5px; }
+    .hr-blue { width: 92%; height: 4px; background: #1767a0; margin: 8px auto 18px auto; border-radius: 2px; opacity: .85; }
 
-    .auth-row{ display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; margin-bottom:1rem; }
-    .card{
-      background:#f7fbff; padding:.75rem; border:1px solid #e6eef6; border-radius:10px; width:100%;
-      max-width:560px;
-    }
-    .card h3{ margin:.2rem 0 .6rem; color:#1767a0; }
-    .row{ display:flex; gap:.5rem; margin-bottom:.5rem; }
-    .row > input, .row > select{
-      flex:1 1 auto; padding:.5rem .6rem; border:1px solid #cfe0f3; border-radius:8px; font-size:.95rem;
-    }
-    .row > button{
-      flex:0 0 auto; padding:.5rem .8rem; border:none; border-radius:8px; cursor:pointer; font-weight:700;
-      background:#1767a0; color:#fff;
-    }
-    .row .ghost{ background:#e9f1f9; color:#143158; }
-    .muted{ color:#5b6b7d; font-size:.9rem; }
-    .ok{ color:#1f8a50; font-weight:700; }
-    .warn{ color:#b65700; font-weight:700; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .grow { flex:1; }
+    .muted { color:#5a728f; }
+    .warn { color:#b54708; }
+    .ok { color:#157f3b; }
+    .err { color:#b42318; }
 
-    .tabs{ display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center; margin:1rem 0; }
-    .tab-btn{ border:none; background:#e9f1f9; color:#143158; padding:.5rem .8rem; border-radius:.6rem; font-weight:700; cursor:pointer; }
-    .tab-btn.active{ background:#1767a0; color:#fff; }
+    .card { background:#f7fbff; border:1px solid #e6eef6; border-radius:12px; padding:12px; margin:10px 0; }
 
-    .grid{ display:grid; gap:10px; grid-template-columns: repeat(12, 1fr); }
-    .col-12{ grid-column: span 12; }
-    .col-6{ grid-column: span 6; }
-    .col-4{ grid-column: span 4; }
-    .col-3{ grid-column: span 3; }
+    /* Auth */
+    .auth-wrap { max-width:420px; margin:40px auto; background:#fff; padding:20px; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
+    .auth-title { text-align:center; font-weight:700; margin-bottom:10px; }
+    .field { display:flex; flex-direction:column; gap:6px; margin:10px 0; }
+    input[type=text], input[type=password], input[type=number], select, textarea { padding:8px 10px; border:1px solid #d7e3ef; border-radius:8px; background:#fff; font-size:14px; color:#143158; }
+    textarea { min-height:80px; }
+    .btn { border:none; background:#1767a0; color:#fff; padding:8px 12px; border-radius:8px; font-weight:700; cursor:pointer; box-shadow:0 1px 4px #0001; }
+    .btn.secondary { background:#e9f1f9; color:#143158; }
+    .btn.ghost { background:transparent; color:#1767a0; border:1px solid #1767a0; }
+    .btn.small { padding:6px 10px; font-size:12px; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .right { margin-left:auto; }
 
-    .panel{ border:1px solid #e6eef6; border-radius:10px; padding:.8rem; background:#fbfdff; }
-    .panel h4{ margin:.2rem 0 .6rem; color:#1767a0; }
+    /* Tabs */
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 14px; }
+    .tab-btn { border:none; background:#e9f1f9; color:#143158; padding:7px 10px; border-radius:10px; font-weight:700; cursor:pointer; box-shadow:0 1px 4px #0001; }
+    .tab-btn.active { background:#1767a0; color:#fff; }
 
-    table{ width:100%; border-collapse:collapse; background:#fff; border:1px solid #e6eef6; border-radius:10px; overflow:hidden; }
-    thead{ background:#ddebf7; }
-    th,td{ padding:.55rem .6rem; border-bottom:1px solid #eef4fb; text-align:left; vertical-align:middle; }
-    tbody tr:hover{ background:#f5faff; }
-    .actions{ display:flex; gap:.4rem; }
-    .btn{ padding:.35rem .6rem; border:none; border-radius:6px; cursor:pointer; font-weight:700; }
-    .btn.primary{ background:#1767a0; color:#fff; }
-    .btn.ghost{ background:#e9f1f9; color:#143158; }
-    .btn.danger{ background:#e55353; color:#fff; }
-    .input-sm{ width:100%; padding:.35rem .5rem; border:1px solid #cfe0f3; border-radius:6px; font-size:.9rem; }
-    .select-sm{ width:100%; padding:.35rem .5rem; border:1px solid #cfe0f3; border-radius:6px; font-size:.9rem; background:#fff; }
-    .hint{ color:#5b6b7d; font-size:.9rem; }
-    .toolbar{ display:flex; gap:.5rem; align-items:center; margin:.4rem 0 .6rem; flex-wrap:wrap; }
-    .toolbar .right{ margin-left:auto; display:flex; gap:.4rem; }
-    .pill{ display:inline-block; padding:.2rem .45rem; background:#eff6ff; border:1px solid #dbeafe; border-radius:6px; font-size:.85rem; color:#1e40af; }
+    /* Tables */
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; background:#fbfdff; border:1px solid #e6eef6; border-radius:8px; overflow:hidden; }
+    thead { background:#ddebf7; }
+    th, td { padding:8px 10px; border-bottom:1px solid #edf3f9; text-align:left; vertical-align:middle; }
+    tbody tr:hover { background:#eef6ff; }
 
-    @media (max-width: 900px){
-      .col-6{ grid-column: span 12; }
-      .col-4{ grid-column: span 12; }
-      .col-3{ grid-column: span 12; }
-    }
+    .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin: 8px 0; }
+    .pill { font-size:12px; background:#143158; color:#fff; border-radius:6px; padding:4px 8px; }
+    .chip { font-size:12px; background:#eef6ff; color:#143158; border-radius:999px; padding:2px 8px; }
+    .spacer { flex:1; }
+
+    .grid { display:grid; gap:8px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    @media (max-width: 860px){ .grid-3, .grid-4 { grid-template-columns: repeat(1,minmax(0,1fr)); } }
+
+    .help { font-size:12px; color:#5a728f; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .center { text-align:center; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>謝爾夏｜管理後台</h1>
-    <div class="hr"></div>
+  <div class="container" id="app" hidden>
+    <div class="row">
+      <h1>謝爾夏｜管理後台</h1>
+      <span class="pill">C 專案（資料庫）</span>
+      <span class="chip" id="whoami"></span>
+      <button class="btn ghost right" id="signoutBtn">登出</button>
+    </div>
+    <div class="hr-blue"></div>
 
-    <!-- 登入區：C（管理專案，本資料庫） -->
-    <div class="auth-row">
-      <div class="card" id="authC">
-        <h3>登入 C（本專案，資料可寫）</h3>
-        <div class="row">
-          <input id="cEmail" type="email" placeholder="Email (C)" />
-          <input id="cPass" type="password" placeholder="密碼 (C)" />
-          <button id="btnLoginC">登入</button>
-          <button id="btnLogoutC" class="ghost">登出</button>
-        </div>
-        <div class="muted">狀態：<span id="stateC">未登入</span></div>
-      </div>
-
-      <!-- 可選登入：A（拿玩家/角色，僅同步用） -->
-      <div class="card" id="authA">
-        <h3>登入 A（玩家/角色來源，僅讀+同步）</h3>
-        <div class="row">
-          <input id="aEmail" type="email" placeholder="Email (A)" />
-          <input id="aPass" type="password" placeholder="密碼 (A)" />
-          <button id="btnLoginA">登入</button>
-          <button id="btnLogoutA" class="ghost">登出</button>
-        </div>
-        <div class="row">
-          <button id="btnSyncPA" class="ghost">從 A 同步 → C（玩家全抓、角色只抓過審）</button>
-          <span class="hint">會 upsert 到 <b>player_links</b> / <b>student_cache</b>（保留 DCID / 管理員）</span>
-        </div>
-        <div class="muted">狀態：<span id="stateA">未登入</span></div>
-      </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="t1">TAP 1 學生快取 / 玩家綁定</button>
+      <button class="tab-btn" data-tab="t2">TAP 2 地區表</button>
+      <button class="tab-btn" data-tab="t3">TAP 3 時薪設定</button>
+      <button class="tab-btn" data-tab="t4">TAP 4 販售道具</button>
+      <button class="tab-btn" data-tab="t5">TAP 5 戰鬥攜帶物</button>
+      <button class="tab-btn" data-tab="t6">TAP 6 教師文本</button>
     </div>
 
-    <!-- Tabs -->
-    <div class="tabs" id="tabs">
-      <button class="tab-btn active" data-tab="t1">TAP 1：學生快取 / 玩家綁定</button>
-      <button class="tab-btn" data-tab="t2">TAP 2：地區表</button>
-      <button class="tab-btn" data-tab="t3">TAP 3：時薪設定</button>
-      <button class="tab-btn" data-tab="t4">TAP 4：販售道具</button>
-      <button class="tab-btn" data-tab="t5">TAP 5：戰鬥攜帶物</button>
-      <button class="tab-btn" data-tab="t6">TAP 6：教師文本</button>
-    </div>
-
-    <!-- 內容 -->
-    <div id="view"></div>
+    <div id="content"></div>
   </div>
 
-<script>
-/** ========= Supabase 兩個 client =========
- * C：本專案（你的 DB），需要登入後才能寫
- * A：玩家/角色來源（可選登入，用於同步）
- */
-const C_URL  = 'https://pptmmkpipwcgbxbimarp.supabase.co';
-const C_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwdG1ta3BpcHdjZ2J4YmltYXJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NDE5NjQsImV4cCI6MjA3MzUxNzk2NH0.E5ynYRbCKqnsppdhNZFHN4biiS-8hxhBplEG9FeUdcU';
-
-const A_URL  = 'https://wfhwhvodgikpducrhgda.supabase.co';
-const A_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmaHdodm9kZ2lrcGR1Y3JoZ2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwMTAwNjEsImV4cCI6MjA2MzU4NjA2MX0.P6P-x4SxjiR4VdWH6VFgY_ktgMac_OzuI4Bl7HWskz8';
-
-const supaC = window.supabase.createClient(C_URL, C_ANON);
-const supaA = window.supabase.createClient(A_URL, A_ANON);
-
-/** ========= 共用：登入/狀態 ========= */
-const $ = s => document.querySelector(s);
-const stateC = $('#stateC');
-const stateA = $('#stateA');
-function setCStatus(u){
-  stateC.innerHTML = u ? `<span class="ok">已登入（${u.email||u.id}）</span>` : `<span class="warn">未登入</span>`;
-}
-function setAStatus(u){
-  stateA.innerHTML = u ? `<span class="ok">已登入（${u.email||u.id}）</span>` : `<span class="warn">未登入</span>`;
-}
-
-$('#btnLoginC').onclick = async () => {
-  const email = $('#cEmail').value.trim();
-  const pass  = $('#cPass').value;
-  const { data, error } = await supaC.auth.signInWithPassword({ email, password: pass });
-  if(error){ alert('C 登入失敗：'+error.message); return; }
-  setCStatus(data.user);
-  loadActiveTab();
-};
-$('#btnLogoutC').onclick = async () => { await supaC.auth.signOut(); setCStatus(null); };
-
-$('#btnLoginA').onclick = async () => {
-  const email = $('#aEmail').value.trim();
-  const pass  = $('#aPass').value;
-  const { data, error } = await supaA.auth.signInWithPassword({ email, password: pass });
-  if(error){ alert('A 登入失敗：'+error.message); return; }
-  setAStatus(data.user);
-};
-$('#btnLogoutA').onclick = async () => { await supaA.auth.signOut(); setAStatus(null); };
-
-/** ========= TAP 1：學生快取（只讀）＋ 玩家綁定（編輯 DCID / 管理員） ========= */
-async function viewT1(){
-  const container = document.createElement('div');
-  container.className = 'grid';
-
-  // 左：學生快取（只讀）
-  const left = document.createElement('div'); left.className = 'col-6 panel';
-  left.innerHTML = `
-    <h4>學生快取（只讀）</h4>
-    <div class="toolbar">
-      <span class="pill">student_cache</span>
-      <div class="right">
-        <button class="btn ghost" id="btnRefreshStu">重新整理</button>
+  <!-- Auth Screen -->
+  <div id="auth" class="auth-wrap" hidden>
+    <div class="auth-title">登入管理後台（C 專案）</div>
+    <div class="help">請使用你在 <b>pptmmkpipwcgbxbimarp.supabase.co</b> 上建立的帳號登入。登入成功後才可修改資料。</div>
+    <div class="field">
+      <label>電子郵件</label>
+      <input id="email" type="text" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <label>密碼</label>
+      <input id="password" type="password" placeholder="••••••••" />
+    </div>
+    <div class="row">
+      <button class="btn" id="signinBtn">登入</button>
+      <span id="authMsg" class="muted"></span>
+    </div>
+    <div class="card" style="margin-top:10px">
+      <div class="help">
+        若你同時已登入 <b>A 專案</b>（wfhwhvodgikpducrhgda.supabase.co），按下 TAP1 的「同步按鈕」即可從 A 抓取 <b>全部玩家</b> 與 <b>過審角色（student_code 不為空）</b> 回來更新本庫。
       </div>
     </div>
-    <div style="max-height:420px; overflow:auto;">
-      <table>
-        <thead><tr><th>student_id</th><th>player_id</th><th>角色名稱</th><th>更新時間</th></tr></thead>
-        <tbody id="tStu"></tbody>
-      </table>
-    </div>
-  `;
+  </div>
 
-  // 右：玩家綁定（可改 DCID / 管理員）
-  const right = document.createElement('div'); right.className = 'col-6 panel';
-  right.innerHTML = `
-    <h4>玩家綁定（設定 DCID / 管理員）</h4>
-    <div class="toolbar">
-      <span class="pill">player_links</span>
-      <div class="right">
-        <button class="btn ghost" id="btnRefreshPlayer">重新整理</button>
-        <button class="btn" id="btnSyncFromA">從 A 同步 → C</button>
-        <button class="btn primary" id="btnSavePlayers">儲存修改</button>
-      </div>
-    </div>
-    <div style="max-height:420px; overflow:auto;">
-      <table>
-        <thead><tr><th>player_id</th><th>玩家名稱</th><th>DCID</th><th>管理員</th></tr></thead>
-        <tbody id="tPlayers"></tbody>
-      </table>
-    </div>
-  `;
+  <script>
+    // ------------------------
+    // Supabase 客戶端（C：本庫 / A：玩家&角色）
+    // ------------------------
+    const C_URL = 'https://pptmmkpipwcgbxbimarp.supabase.co';
+    const C_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwdG1ta3BpcHdjZ2J4YmltYXJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NDE5NjQsImV4cCI6MjA3MzUxNzk2NH0.E5ynYRbCKqnsppdhNZFHN4biiS-8hxhBplEG9FeUdcU';
 
-  container.appendChild(left); container.appendChild(right);
+    const A_URL = 'https://wfhwhvodgikpducrhgda.supabase.co';
+    const A_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmaHdodm9kZ2lrcGR1Y3JoZ2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwMTAwNjEsImV4cCI6MjA2MzU4NjA2MX0.P6P-x4SxjiR4VdWH6VFgY_ktgMac_OzuI4Bl7HWskz8';
 
-  // 綁事件
-  left.querySelector('#btnRefreshStu').onclick = renderStudents;
-  right.querySelector('#btnRefreshPlayer').onclick = renderPlayers;
-  right.querySelector('#btnSyncFromA').onclick   = syncFromA;
-  right.querySelector('#btnSavePlayers').onclick = savePlayers;
-
-  // 初次載入
-  await renderStudents();
-  await renderPlayers();
-
-  async function renderStudents(){
-    const { data, error } = await supaC.from('student_cache')
-      .select('*').order('student_name',{ascending:true});
-    if(error){ alert('讀取 student_cache 失敗：'+error.message); return; }
-    const tb = left.querySelector('#tStu'); tb.innerHTML='';
-    (data||[]).forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="muted">${r.student_id}</td>
-        <td class="muted">${r.player_id||''}</td>
-        <td>${r.student_name}</td>
-        <td class="muted">${new Date(r.updated_at).toLocaleString('zh-TW')}</td>`;
-      tb.appendChild(tr);
+    const adminClient = window.supabase.createClient(C_URL, C_ANON, {
+      auth: { persistSession: true, autoRefreshToken: true }
     });
-  }
-
-  let playerRows = [];
-  async function renderPlayers(){
-    const { data, error } = await supaC.from('player_links')
-      .select('*').order('player_name',{ascending:true});
-    if(error){ alert('讀取 player_links 失敗：'+error.message); return; }
-    playerRows = data||[];
-    const tb = right.querySelector('#tPlayers'); tb.innerHTML='';
-    playerRows.forEach((r,i)=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="muted">${r.player_id}</td>
-        <td>${r.player_name||''}</td>
-        <td><input class="input-sm" value="${r.discord_user_id||''}" data-i="${i}" data-k="discord_user_id"/></td>
-        <td><input type="checkbox" ${r.is_admin?'checked':''} data-i="${i}" data-k="is_admin"/></td>`;
-      tb.appendChild(tr);
-    });
-    // 代理事件
-    tb.oninput = (e)=>{
-      const el = e.target;
-      const i  = +el.dataset.i;
-      const k  = el.dataset.k;
-      if(k==='discord_user_id'){ playerRows[i].discord_user_id = el.value.trim() || null; }
-    };
-    tb.onchange = (e)=>{
-      const el = e.target;
-      const i  = +el.dataset.i;
-      const k  = el.dataset.k;
-      if(k==='is_admin'){ playerRows[i].is_admin = !!el.checked; }
-    };
-  }
-
-  async function savePlayers(){
-    const { error } = await supaC.from('player_links').upsert(playerRows);
-    if(error){ alert('儲存失敗：'+error.message); return; }
-    alert('已儲存。');
-    renderPlayers();
-  }
-
-  async function syncFromA(){
-    // 需要 A / C 都登入
-    const aSession = (await supaA.auth.getSession()).data.session;
-    if(!aSession){ alert('請先登入 A'); return; }
-    const cSession = (await supaC.auth.getSession()).data.session;
-    if(!cSession){ alert('請先登入 C'); return; }
-
-    // 1) 讀 A 的 players（全抓）
-    const { data: players, error: pErr } = await supaA.from('players')
-      .select('player_id, username').order('username',{ascending:true});
-    if(pErr){ alert('讀取 A.players 失敗：'+pErr.message); return; }
-
-    // 2) 讀 A 的 students（只抓過審：student_code not null）
-    const { data: students, error: sErr } = await supaA.from('students')
-      .select('student_id, name, student_code, player_id')
-      .not('student_code','is',null)
-      .order('name',{ascending:true});
-    if(sErr){ alert('讀取 A.students 失敗：'+sErr.message); return; }
-
-    // 3) 讀 C 現有 player_links 以保留 DCID / is_admin
-    const { data: curLinks } = await supaC.from('player_links').select('*');
-    const curMap = new Map((curLinks||[]).map(x=>[x.player_id, x]));
-
-    // 4) 準備 upsert：player_links
-    const upsertPlayers = (players||[]).map(p=>{
-      const keep = curMap.get(p.player_id);
-      return {
-        player_id: p.player_id,
-        player_name: p.username || '玩家',
-        discord_user_id: keep?.discord_user_id ?? null,
-        is_admin: keep?.is_admin ?? false
-      };
+    const aClient = window.supabase.createClient(A_URL, A_ANON, {
+      auth: { persistSession: true, autoRefreshToken: true }
     });
 
-    // 5) 準備 upsert：student_cache（名稱快取）
-    const upsertStudents = (students||[]).map(s=>({
-      student_id: s.student_id,
-      player_id:  s.player_id,
-      student_name: s.name,
-      updated_at: new Date().toISOString()
-    }));
+    // Enums（前端固定選單）
+    const AREA_TYPES = ['學習','愛校','打工','特殊打工','遊戲'];
+    const CURRENCIES = ['一般貨幣','謝爾夏貨幣','愛校點數'];
 
-    // 6) 寫入 C
-    const { error: u1 } = await supaC.from('player_links').upsert(upsertPlayers);
-    if(u1){ alert('寫入 C.player_links 失敗：'+u1.message); return; }
-    const { error: u2 } = await supaC.from('student_cache').upsert(upsertStudents);
-    if(u2){ alert('寫入 C.student_cache 失敗：'+u2.message); return; }
+    // 小工具
+    const $ = (sel) => document.querySelector(sel);
+    const el = (tag, attrs={}, children=[]) => { const n=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>{ if(k==='class') n.className=v; else if(k==='text') n.textContent=v; else n.setAttribute(k,v); }); children.forEach(c=>n.appendChild(c)); return n; };
+    const fmtTime = (s)=> s? new Date(s).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' }) : '-';
 
-    alert(`同步完成！玩家 ${upsertPlayers.length} 筆；過審學生 ${upsertStudents.length} 筆。`);
-    renderStudents(); renderPlayers();
-  }
-
-  return container;
-}
-
-/** ========= TAP 2：地區表（新增 + 一覽 + 內嵌編輯） ========= */
-async function viewT2(){
-  const wrap = document.createElement('div'); wrap.className='panel';
-
-  // 新增表單
-  const form = document.createElement('div'); form.className='grid';
-  form.innerHTML = `
-    <div class="col-12"><h4>新增 / 編輯地區</h4></div>
-    <div class="col-4"><input id="area_name" class="input-sm" placeholder="地區顯示名稱"/></div>
-    <div class="col-3">
-      <select id="area_type" class="select-sm">
-        <option value="學習">學習</option>
-        <option value="愛校">愛校</option>
-        <option value="打工">打工</option>
-        <option value="特殊打工">特殊打工</option>
-        <option value="遊戲">遊戲</option>
-      </select>
-    </div>
-    <div class="col-5"><input id="webhook_url" class="input-sm" placeholder="webhook_url（可空）"/></div>
-    <div class="col-4"><input id="dc_thread_id" class="input-sm" placeholder="dc_thread_id（可空）"/></div>
-    <div class="col-3"><input id="daily_limit" class="input-sm" placeholder="愛校每日上限（可空/數字）"/></div>
-    <div class="col-5">
-      <button class="btn primary" id="btnAddArea">新增</button>
-      <span class="hint">排序：地區顯示名稱（不換頁）</span>
-    </div>
-  `;
-
-  const list = document.createElement('div');
-  list.innerHTML = `
-    <div class="toolbar">
-      <span class="pill">area</span>
-      <div class="right"><button class="btn ghost" id="btnReloadArea">重新整理</button></div>
-    </div>
-    <div style="max-height:520px; overflow:auto;">
-      <table>
-        <thead><tr><th>area_id</th><th>名稱</th><th>型別</th><th>webhook</th><th>thread</th><th>每日</th><th>操作</th></tr></thead>
-        <tbody id="tArea"></tbody>
-      </table>
-    </div>
-  `;
-
-  wrap.appendChild(form); wrap.appendChild(list);
-
-  form.querySelector('#btnAddArea').onclick = async ()=>{
-    const area_name = form.querySelector('#area_name').value.trim();
-    const area_type = form.querySelector('#area_type').value;
-    const webhook_url = form.querySelector('#webhook_url').value.trim()||null;
-    const dc_thread_id = form.querySelector('#dc_thread_id').value.trim()||null;
-    const daily_limit = form.querySelector('#daily_limit').value.trim();
-    if(!area_name){ alert('請輸入地區顯示名稱'); return; }
-    const payload = { area_name, area_type, webhook_url, dc_thread_id,
-                      daily_limit: daily_limit? parseInt(daily_limit,10): null };
-    const { error } = await supaC.from('area').insert(payload);
-    if(error){ alert('新增失敗：'+error.message); return; }
-    form.querySelectorAll('input').forEach(i=>i.value='');
-    await renderArea();
-  };
-  list.querySelector('#btnReloadArea').onclick = renderArea;
-
-  async function renderArea(){
-    const { data, error } = await supaC.from('area').select('*').order('area_name',{ascending:true});
-    if(error){ alert('讀取 area 失敗：'+error.message); return; }
-    const tb = list.querySelector('#tArea'); tb.innerHTML='';
-    (data||[]).forEach((r)=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="muted">${r.area_id}</td>
-        <td><input class="input-sm" value="${r.area_name||''}" data-k="area_name"/></td>
-        <td>
-          <select class="select-sm" data-k="area_type">
-            ${['學習','愛校','打工','特殊打工','遊戲'].map(v=>`<option ${v===r.area_type?'selected':''}>${v}</option>`).join('')}
-          </select>
-        </td>
-        <td><input class="input-sm" value="${r.webhook_url||''}" data-k="webhook_url"/></td>
-        <td><input class="input-sm" value="${r.dc_thread_id||''}" data-k="dc_thread_id"/></td>
-        <td><input class="input-sm" value="${r.daily_limit??''}" data-k="daily_limit"/></td>
-        <td class="actions">
-          <button class="btn primary" data-act="save">保存</button>
-          <button class="btn danger" data-act="del">刪除</button>
-        </td>
-      `;
-      // 綁事件
-      tr.onclick = async (e)=>{
-        const act = e.target?.dataset?.act;
-        if(!act) return;
-        if(act==='save'){
-          const payload = {
-            area_name: tr.querySelector('[data-k="area_name"]').value.trim(),
-            area_type: tr.querySelector('[data-k="area_type"]').value,
-            webhook_url: tr.querySelector('[data-k="webhook_url"]').value.trim()||null,
-            dc_thread_id: tr.querySelector('[data-k="dc_thread_id"]').value.trim()||null,
-            daily_limit: (()=>{
-              const v = tr.querySelector('[data-k="daily_limit"]').value.trim();
-              return v? parseInt(v,10): null;
-            })()
-          };
-          const { error } = await supaC.from('area').update(payload).eq('area_id', r.area_id);
-          if(error){ alert('更新失敗：'+error.message); return; }
-          alert('已保存');
-        }else if(act==='del'){
-          if(!confirm('確定刪除此地區？')) return;
-          const { error } = await supaC.from('area').delete().eq('area_id', r.area_id);
-          if(error){ alert('刪除失敗：'+error.message); return; }
-          tr.remove();
-        }
-      };
-      tb.appendChild(tr);
-    });
-  }
-
-  await renderArea();
-  return wrap;
-}
-
-/** ========= TAP 3：時薪設定（單筆） ========= */
-async function viewT3(){
-  const wrap = document.createElement('div'); wrap.className='panel';
-  wrap.innerHTML = `
-    <h4>時薪設定（wage_config）</h4>
-    <div class="grid">
-      <div class="col-3"><input id="work_wage_default" class="input-sm" placeholder="一般打工預設時薪"/></div>
-      <div class="col-3"><input id="special_wage_default" class="input-sm" placeholder="特殊打工預設時薪"/></div>
-      <div class="col-6">
-        <button class="btn primary" id="btnSaveWage">保存</button>
-        <span class="hint">新建立的打工紀錄才會吃到最新時薪（舊紀錄不回溯）</span>
-      </div>
-    </div>
-  `;
-  const work = wrap.querySelector('#work_wage_default');
-  const spec = wrap.querySelector('#special_wage_default');
-
-  async function load(){
-    const { data, error } = await supaC.from('wage_config').select('*').eq('config_id',1).maybeSingle();
-    if(error){ alert('讀取 wage_config 失敗：'+error.message); return; }
-    work.value = data?.work_wage_default ?? '';
-    spec.value = data?.special_wage_default ?? '';
-  }
-  wrap.querySelector('#btnSaveWage').onclick = async ()=>{
-    const w = parseInt(work.value,10);
-    const s = parseInt(spec.value,10);
-    const { error } = await supaC.from('wage_config').upsert({
-      config_id:1, work_wage_default: isNaN(w)?100:w, special_wage_default: isNaN(s)?5:s, updated_at: new Date().toISOString()
-    });
-    if(error){ alert('保存失敗：'+error.message); return; }
-    alert('已保存');
-  };
-  await load();
-  return wrap;
-}
-
-/** ========= TAP 4：販售道具（CRUD） ========= */
-async function viewT4(){
-  const wrap = document.createElement('div'); wrap.className='panel';
-  wrap.innerHTML = `
-    <h4>販售道具（shop_items）</h4>
-    <div class="grid">
-      <div class="col-3"><input id="si_name" class="input-sm" placeholder="道具名稱"/></div>
-      <div class="col-2">
-        <select id="si_type" class="select-sm">
-          <option>一般貨幣</option><option>謝爾夏貨幣</option><option>愛校點數</option>
-        </select>
-      </div>
-      <div class="col-2"><input id="si_price" class="input-sm" placeholder="售價（數字）"/></div>
-      <div class="col-2"><input id="si_stock" class="input-sm" placeholder="庫存（數字）"/></div>
-      <div class="col-3"><input id="si_max" class="input-sm" placeholder="可用次數（空=永久）"/></div>
-      <div class="col-9"><input id="si_desc" class="input-sm" placeholder="商品簡介"/></div>
-      <div class="col-3"><button class="btn primary" id="btnAddItem">新增</button></div>
-    </div>
-    <div class="toolbar"><span class="pill">shop_items</span>
-      <div class="right"><button class="btn ghost" id="btnReloadSI">重新整理</button></div>
-    </div>
-    <div style="max-height:520px; overflow:auto;">
-      <table>
-        <thead><tr><th>名稱</th><th>類型</th><th>售價</th><th>庫存</th><th>可用次數</th><th>簡介</th><th>操作</th></tr></thead>
-        <tbody id="tSI"></tbody>
-      </table>
-    </div>
-  `;
-
-  wrap.querySelector('#btnAddItem').onclick = async ()=>{
-    const name = wrap.querySelector('#si_name').value.trim();
-    if(!name){ alert('請填道具名稱'); return; }
-    const payload = {
-      item_name: name,
-      price_type: wrap.querySelector('#si_type').value,
-      price: parseInt(wrap.querySelector('#si_price').value||'0',10),
-      stock: parseInt(wrap.querySelector('#si_stock').value||'0',10),
-      max_uses: (()=>{
-        const v = wrap.querySelector('#si_max').value.trim();
-        return v? parseInt(v,10): null;
-      })(),
-      shop_desc: wrap.querySelector('#si_desc').value.trim()||null
-    };
-    const { error } = await supaC.from('shop_items').insert(payload);
-    if(error){ alert('新增失敗：'+error.message); return; }
-    ['#si_name','#si_price','#si_stock','#si_max','#si_desc'].forEach(sel=>wrap.querySelector(sel).value='');
-    render();
-  };
-
-  wrap.querySelector('#btnReloadSI').onclick = render;
-
-  async function render(){
-    const { data, error } = await supaC.from('shop_items').select('*').order('item_name',{ascending:true});
-    if(error){ alert('讀取失敗：'+error.message); return; }
-    const tb = wrap.querySelector('#tSI'); tb.innerHTML='';
-    (data||[]).forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><input class="input-sm" value="${r.item_name}" data-k="item_name"/></td>
-        <td>
-          <select class="select-sm" data-k="price_type">
-            ${['一般貨幣','謝爾夏貨幣','愛校點數'].map(v=>`<option ${v===r.price_type?'selected':''}>${v}</option>`).join('')}
-          </select>
-        </td>
-        <td><input class="input-sm" value="${r.price}" data-k="price"/></td>
-        <td><input class="input-sm" value="${r.stock}" data-k="stock"/></td>
-        <td><input class="input-sm" value="${r.max_uses??''}" data-k="max_uses"/></td>
-        <td><input class="input-sm" value="${r.shop_desc??''}" data-k="shop_desc"/></td>
-        <td class="actions">
-          <button class="btn primary" data-act="save">保存</button>
-          <button class="btn danger" data-act="del">刪除</button>
-        </td>
-      `;
-      tr.onclick = async (e)=>{
-        const act = e.target?.dataset?.act;
-        if(!act) return;
-        if(act==='save'){
-          const payload = {
-            item_name: tr.querySelector('[data-k="item_name"]').value.trim(),
-            price_type: tr.querySelector('[data-k="price_type"]').value,
-            price: parseInt(tr.querySelector('[data-k="price"]').value||'0',10),
-            stock: parseInt(tr.querySelector('[data-k="stock"]').value||'0',10),
-            max_uses: (()=>{
-              const v = tr.querySelector('[data-k="max_uses"]').value.trim();
-              return v? parseInt(v,10): null;
-            })(),
-            shop_desc: tr.querySelector('[data-k="shop_desc"]').value.trim()||null
-          };
-          const { error } = await supaC.from('shop_items').update(payload).eq('id', r.id);
-          if(error){ alert('更新失敗：'+error.message); return; }
-          alert('已保存');
-        }else if(act==='del'){
-          if(!confirm('確定刪除此商品？')) return;
-          const { error } = await supaC.from('shop_items').delete().eq('id', r.id);
-          if(error){ alert('刪除失敗：'+error.message); return; }
-          tr.remove();
-        }
-      };
-      tb.appendChild(tr);
-    });
-  }
-
-  await render();
-  return wrap;
-}
-
-/** ========= TAP 5：戰鬥攜帶物（新增 + 一覽 + 內嵌編輯） ========= */
-async function viewT5(){
-  const wrap = document.createElement('div'); wrap.className='panel';
-  wrap.innerHTML = `
-    <h4>戰鬥攜帶物（battle_items）</h4>
-    <div class="grid">
-      <div class="col-3"><input id="bi_student" class="input-sm" placeholder="角色名稱"/></div>
-      <div class="col-2"><input id="bi_slot" class="input-sm" placeholder="欄位(1-4)"/></div>
-      <div class="col-3"><input id="bi_item" class="input-sm" placeholder="裝備名稱"/></div>
-      <div class="col-2"><input id="bi_uses" class="input-sm" placeholder="剩餘次數（空=永久）"/></div>
-      <div class="col-2">
-        <select id="bi_lock" class="select-sm">
-          <option value="false">可回背包</option>
-          <option value="true">壞掉前鎖定</option>
-        </select>
-      </div>
-      <div class="col-12">
-        <button class="btn primary" id="btnAddBI">新增</button>
-      </div>
-    </div>
-    <div class="toolbar"><span class="pill">battle_items</span>
-      <div class="right"><button class="btn ghost" id="btnReloadBI">重新整理</button></div>
-    </div>
-    <div style="max-height:520px; overflow:auto;">
-      <table>
-        <thead><tr><th>角色</th><th>槽位</th><th>裝備</th><th>剩餘次數</th><th>鎖定</th><th>操作</th></tr></thead>
-        <tbody id="tBI"></tbody>
-      </table>
-    </div>
-  `;
-  wrap.querySelector('#btnAddBI').onclick = async ()=>{
-    const payload = {
-      student_name: wrap.querySelector('#bi_student').value.trim(),
-      slot: parseInt(wrap.querySelector('#bi_slot').value||'0',10),
-      item_name: wrap.querySelector('#bi_item').value.trim(),
-      uses_left: (()=>{
-        const v = wrap.querySelector('#bi_uses').value.trim();
-        return v? parseInt(v,10): null;
-      })(),
-      locked_until_broken: wrap.querySelector('#bi_lock').value==='true'
-    };
-    if(!payload.student_name || !payload.item_name || !payload.slot){ alert('請完整填寫'); return; }
-    const { error } = await supaC.from('battle_items').insert(payload);
-    if(error){ alert('新增失敗：'+error.message); return; }
-    ['#bi_student','#bi_slot','#bi_item','#bi_uses'].forEach(sel=>wrap.querySelector(sel).value='');
-    await render();
-  };
-  wrap.querySelector('#btnReloadBI').onclick = render;
-
-  async function render(){
-    const { data, error } = await supaC.from('battle_items').select('*').order('student_name',{ascending:true}).order('slot');
-    if(error){ alert('讀取失敗：'+error.message); return; }
-    const tb = wrap.querySelector('#tBI'); tb.innerHTML='';
-    (data||[]).forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><input class="input-sm" value="${r.student_name}" data-k="student_name"/></td>
-        <td><input class="input-sm" value="${r.slot}" data-k="slot"/></td>
-        <td><input class="input-sm" value="${r.item_name}" data-k="item_name"/></td>
-        <td><input class="input-sm" value="${r.uses_left??''}" data-k="uses_left"/></td>
-        <td>
-          <select class="select-sm" data-k="locked_until_broken">
-            <option value="false" ${!r.locked_until_broken?'selected':''}>可回背包</option>
-            <option value="true" ${r.locked_until_broken?'selected':''}>壞掉前鎖定</option>
-          </select>
-        </td>
-        <td class="actions">
-          <button class="btn primary" data-act="save">保存</button>
-          <button class="btn danger" data-act="del">刪除</button>
-        </td>
-      `;
-      tr.onclick = async (e)=>{
-        const act = e.target?.dataset?.act;
-        if(!act) return;
-        if(act==='save'){
-          const payload = {
-            student_name: tr.querySelector('[data-k="student_name"]').value.trim(),
-            slot: parseInt(tr.querySelector('[data-k="slot"]').value||'0',10),
-            item_name: tr.querySelector('[data-k="item_name"]').value.trim(),
-            uses_left: (()=>{
-              const v = tr.querySelector('[data-k="uses_left"]').value.trim();
-              return v? parseInt(v,10): null;
-            })(),
-            locked_until_broken: tr.querySelector('[data-k="locked_until_broken"]').value==='true'
-          };
-          const { error } = await supaC.from('battle_items').update(payload).eq('id', r.id);
-          if(error){ alert('更新失敗：'+error.message); return; }
-          alert('已保存');
-        }else if(act==='del'){
-          if(!confirm('確定刪除？')) return;
-          const { error } = await supaC.from('battle_items').delete().eq('id', r.id);
-          if(error){ alert('刪除失敗：'+error.message); return; }
-          tr.remove();
-        }
-      };
-      tb.appendChild(tr);
-    });
-  }
-
-  await render();
-  return wrap;
-}
-
-/** ========= TAP 6：教師文本（地區=學習 下拉 + 新增 + 一覽） ========= */
-async function viewT6(){
-  const wrap = document.createElement('div'); wrap.className='panel';
-  wrap.innerHTML = `
-    <h4>教師文本（teacher_texts）</h4>
-    <div class="grid">
-      <div class="col-4">
-        <select id="tt_area" class="select-sm"></select>
-      </div>
-      <div class="col-4"><input id="tt_course" class="input-sm" placeholder="課程名稱"/></div>
-      <div class="col-12"><input id="tt_text" class="input-sm" placeholder="老師台詞"/></div>
-      <div class="col-12">
-        <button class="btn primary" id="btnAddTT">新增台詞</button>
-        <span class="hint">一覽依地區顯示名稱排序；下拉僅列「學習」型別</span>
-      </div>
-    </div>
-    <div class="toolbar"><span class="pill">teacher_texts</span>
-      <div class="right"><button class="btn ghost" id="btnReloadTT">重新整理</button></div>
-    </div>
-    <div style="max-height:520px; overflow:auto;">
-      <table>
-        <thead><tr><th>地區</th><th>課程</th><th>台詞</th><th>建立時間</th><th>操作</th></tr></thead>
-        <tbody id="tTT"></tbody>
-      </table>
-    </div>
-  `;
-
-  const sel = wrap.querySelector('#tt_area');
-  async function loadAreas(){
-    const { data, error } = await supaC.from('area')
-      .select('area_id, area_name').eq('area_type','學習').order('area_name',{ascending:true});
-    if(error){ alert('讀取 area 失敗：'+error.message); return; }
-    sel.innerHTML = (data||[]).map(a=>`<option value="${a.area_id}">${a.area_name}</option>`).join('');
-  }
-
-  wrap.querySelector('#btnAddTT').onclick = async ()=>{
-    const area_id = sel.value;
-    const course_name = wrap.querySelector('#tt_course').value.trim();
-    const reply_text  = wrap.querySelector('#tt_text').value.trim();
-    if(!area_id || !course_name || !reply_text){ alert('請完整填寫'); return; }
-    const { error } = await supaC.from('teacher_texts').insert({ area_id, course_name, reply_text });
-    if(error){ alert('新增失敗：'+error.message); return; }
-    wrap.querySelector('#tt_text').value='';
-    await renderTT();
-  };
-  wrap.querySelector('#btnReloadTT').onclick = renderTT;
-
-  async function renderTT(){
-    // 為了以「地區顯示名稱」排序，直接 join 一次（兩段查也可以）
-    const { data, error } = await supaC.rpc('get_teacher_texts_with_area', {}) // 若沒有這個 RPC，就用下列方案
-    .catch(()=>({data:null,error:{message:'no-rpc'}}));
-
-    let rows = null;
-    if(!error && Array.isArray(data)){ rows = data; }
-    else{
-      // 無 RPC 改本機組合
-      const { data: t } = await supaC.from('teacher_texts').select('*');
-      const { data: a } = await supaC.from('area').select('area_id, area_name');
-      const map = new Map((a||[]).map(x=>[x.area_id,x.area_name]));
-      rows = (t||[]).map(x=>({ ...x, area_name: map.get(x.area_id)||'(已刪除)' }));
-      rows.sort((x,y)=> String(x.area_name||'').localeCompare(String(y.area_name||''), 'zh-Hant', {numeric:true}) );
+    // ------------------------
+    // Auth (C 專案)
+    // ------------------------
+    async function showUIBySession(){
+      const { data } = await adminClient.auth.getSession();
+      if (data?.session) {
+        $('#auth').hidden = true; $('#app').hidden = false;
+        const who = data.session.user?.email || data.session.user?.id;
+        $('#whoami').textContent = `已登入：${who}`;
+        renderTab('t1');
+      } else {
+        $('#app').hidden = true; $('#auth').hidden = false;
+      }
     }
 
-    const tb = wrap.querySelector('#tTT'); tb.innerHTML='';
-    (rows||[]).forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.area_name || '(未知)'}</td>
-        <td><input class="input-sm" value="${r.course_name}" data-k="course_name"/></td>
-        <td><input class="input-sm" value="${r.reply_text}" data-k="reply_text"/></td>
-        <td class="muted">${new Date(r.created_at).toLocaleString('zh-TW')}</td>
-        <td class="actions">
-          <button class="btn primary" data-act="save">保存</button>
-          <button class="btn danger" data-act="del">刪除</button>
-        </td>
-      `;
-      tr.onclick = async (e)=>{
-        const act = e.target?.dataset?.act;
-        if(!act) return;
-        if(act==='save'){
-          const payload = {
-            course_name: tr.querySelector('[data-k="course_name"]').value.trim(),
-            reply_text: tr.querySelector('[data-k="reply_text"]').value.trim()
-          };
-          const { error } = await supaC.from('teacher_texts').update(payload).eq('id', r.id);
-          if(error){ alert('更新失敗：'+error.message); return; }
-          alert('已保存');
-        }else if(act==='del'){
-          if(!confirm('確定刪除？')) return;
-          const { error } = await supaC.from('teacher_texts').delete().eq('id', r.id);
-          if(error){ alert('刪除失敗：'+error.message); return; }
-          tr.remove();
-        }
-      };
-      tb.appendChild(tr);
+    $('#signinBtn').addEventListener('click', async () => {
+      $('#signinBtn').disabled = true; $('#authMsg').textContent = '登入中…';
+      const email = $('#email').value.trim();
+      const password = $('#password').value;
+      const { error } = await adminClient.auth.signInWithPassword({ email, password });
+      if (error) { $('#authMsg').textContent = '登入失敗：' + (error.message || ''); } else { $('#authMsg').textContent = '登入成功'; }
+      $('#signinBtn').disabled = false; showUIBySession();
     });
-  }
 
-  await loadAreas();
-  await renderTT();
-  return wrap;
-}
+    $('#signoutBtn').addEventListener('click', async () => {
+      await adminClient.auth.signOut();
+      showUIBySession();
+    });
 
-/** ========= Tab 切換 ========= */
-const view = $('#view');
-const tabs = $('#tabs');
-tabs.onclick = async (e)=>{
-  const btn = e.target.closest('.tab-btn'); if(!btn) return;
-  tabs.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  await loadActiveTab();
-};
-async function loadActiveTab(){
-  const active = tabs.querySelector('.tab-btn.active')?.dataset.tab || 't1';
-  view.innerHTML = '';
-  // 檢查 C 是否已登入（未登入仍可看「只讀」資料，但為了安全，整體設計為：需登入 C 才進管理頁）
-  const cSession = (await supaC.auth.getSession()).data.session;
-  if(!cSession){
-    view.innerHTML = `<div class="panel"><b class="warn">請先登入 C 專案後再使用管理功能。</b></div>`;
-    return;
-  }
-  if(active==='t1') view.appendChild(await viewT1());
-  if(active==='t2') view.appendChild(await viewT2());
-  if(active==='t3') view.appendChild(await viewT3());
-  if(active==='t4') view.appendChild(await viewT4());
-  if(active==='t5') view.appendChild(await viewT5());
-  if(active==='t6') view.appendChild(await viewT6());
-}
+    // ------------------------
+    // Tabs 容器
+    // ------------------------
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        renderTab(btn.dataset.tab);
+      });
+    });
 
-/** ========= 初始化：顯示登入狀態 ========= */
-(async function init(){
-  setCStatus((await supaC.auth.getUser()).data.user);
-  setAStatus((await supaA.auth.getUser()).data.user);
-  loadActiveTab();
-})();
-</script>
+    async function renderTab(key){
+      const c = $('#content'); c.innerHTML = '';
+      if (key==='t1') return renderTab1(c);
+      if (key==='t2') return renderTab2(c);
+      if (key==='t3') return renderTab3(c);
+      if (key==='t4') return renderTab4(c);
+      if (key==='t5') return renderTab5(c);
+      if (key==='t6') return renderTab6(c);
+    }
+
+    // ------------------------
+    // TAP1：學生快取（僅瀏覽）+ 玩家綁定（設定 DCID/is_admin）
+    // ------------------------
+    async function renderTab1(root){
+      // 工具列：同步按鈕
+      const bar = el('div', {class:'toolbar'});
+      const syncBtn = el('button', {class:'btn'}, [document.createTextNode('↻ 從 A 專案同步：玩家 + 過審角色')]);
+      const msg = el('span', {class:'muted'});
+      bar.append(syncBtn, msg);
+
+      // 左：學生快取
+      const left = el('div', {class:'card grow'});
+      left.append(el('div', {class:'row'}, [el('strong', {text:'學生快取（只讀）'}), el('span', {class:'chip', text:'student_cache'})] ));
+      const leftTableWrap = el('div', {class:'table-wrap'});
+      const leftTable = el('table');
+      leftTable.innerHTML = `
+        <thead><tr>
+          <th>student_id</th><th>student_name</th><th>player_id</th><th>更新時間</th>
+        </tr></thead><tbody id="t1-students"></tbody>`;
+      leftTableWrap.append(leftTable); left.append(leftTableWrap);
+
+      // 右：玩家綁定
+      const right = el('div', {class:'card grow'});
+      right.append(el('div', {class:'row'}, [el('strong', {text:'玩家綁定（DCID / 管理員）'}), el('span', {class:'chip', text:'player_links'})] ));
+      const filter = el('input', {type:'text', placeholder:'搜尋玩家名稱/ID…', style:'min-width:200px'});
+      const listBtn = el('button', {class:'btn secondary small'}, [document.createTextNode('重新載入')]);
+      const rightBar = el('div', {class:'toolbar'}); rightBar.append(filter, listBtn);
+      const rightTableWrap = el('div', {class:'table-wrap'});
+      const rightTable = el('table');
+      rightTable.innerHTML = `
+        <thead><tr>
+          <th>player_id</th><th>玩家名稱</th><th>DCID</th><th>管理員</th><th></th>
+        </tr></thead><tbody id="t1-players"></tbody>`;
+      rightTableWrap.append(rightTable); right.append(rightBar, rightTableWrap);
+
+      const rowWrap = el('div', {class:'row'}); rowWrap.append(left, right);
+      root.append(bar, rowWrap);
+
+      // 綁定事件
+      syncBtn.addEventListener('click', async () => {
+        syncBtn.disabled = true; msg.textContent = '同步中（讀 A → 寫 C）…';
+        try {
+          const aUser = await aClient.auth.getUser();
+          if (!aUser?.data?.user) {
+            msg.textContent = '請先在 A 專案登入（同一瀏覽器）後再重試。';
+          }
+          const players = await fetchAllPlayersFromA();
+          const students = await fetchApprovedStudentsFromA();
+          // upsert to C
+          await upsertPlayersToC(players);
+          await upsertStudentsToC(students);
+          msg.textContent = `同步完成：玩家 ${players.length} 筆、過審角色 ${students.length} 筆。`;
+          loadT1();
+        } catch(e){ console.error(e); msg.textContent = '同步失敗：'+(e.message||e); }
+        finally { syncBtn.disabled = false; }
+      });
+
+      listBtn.addEventListener('click', loadT1);
+      filter.addEventListener('input', () => renderPlayersT1(window.__T1_PLAYERS || [], filter.value));
+
+      async function loadT1(){
+        await Promise.all([loadStudents(), loadPlayers()]);
+      }
+
+      async function loadStudents(){
+        const { data, error } = await adminClient.from('student_cache').select('*').order('student_name', {ascending:true});
+        const tb = $('#t1-students'); tb.innerHTML = '';
+        if (error) { tb.innerHTML = `<tr><td colspan=4 class="err">讀取錯誤：${error.message}</td></tr>`; return; }
+        (data||[]).forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td class="mono">${r.student_id}</td><td>${r.student_name}</td><td class="mono">${r.player_id}</td><td>${fmtTime(r.updated_at)}</td>`;
+          tb.appendChild(tr);
+        });
+      }
+
+      async function loadPlayers(){
+        const { data, error } = await adminClient.from('player_links').select('*').order('player_name',{ascending:true});
+        if (error) { renderPlayersT1([], ''); return; }
+        window.__T1_PLAYERS = data||[]; renderPlayersT1(window.__T1_PLAYERS, filter.value);
+      }
+
+      function renderPlayersT1(rows, q){
+        const tb = $('#t1-players'); tb.innerHTML = '';
+        const kw = (q||'').toLowerCase();
+        rows.filter(r => !kw || (String(r.player_name||'').toLowerCase().includes(kw) || String(r.player_id||'').toLowerCase().includes(kw)))
+            .forEach(r => tb.appendChild(playerRow(r)));
+      }
+
+      function playerRow(r){
+        const tr = document.createElement('tr');
+        const dc = el('input', {type:'text', value: r.discord_user_id || '', placeholder:'DCID'});
+        const admin = el('input', {type:'checkbox'}); admin.checked = !!r.is_admin;
+        const save = el('button', {class:'btn small'}, [document.createTextNode('儲存')]);
+        const del = el('button', {class:'btn secondary small'}, [document.createTextNode('清空 DCID')]);
+        tr.appendChild(el('td', {class:'mono', text:r.player_id}));
+        tr.appendChild(el('td', {text:r.player_name||'-'}));
+        const tdc = document.createElement('td'); tdc.appendChild(dc); tr.appendChild(tdc);
+        const tadmin = document.createElement('td'); tadmin.appendChild(admin); tr.appendChild(tadmin);
+        const tbtn = document.createElement('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
+
+        save.addEventListener('click', async () => {
+          save.disabled = true;
+          const { error } = await adminClient.from('player_links').update({ discord_user_id: dc.value||null, is_admin: admin.checked }).eq('player_id', r.player_id);
+          save.disabled = false; if (!error) save.textContent='已儲存'; else save.textContent='失敗'; setTimeout(()=>save.textContent='儲存', 1200);
+        });
+        del.addEventListener('click', async () => {
+          dc.value=''; const { error } = await adminClient.from('player_links').update({ discord_user_id:null }).eq('player_id', r.player_id);
+        });
+        return tr;
+      }
+
+      // A 專案：抓全部玩家/過審角色
+      async function fetchAllPlayersFromA(){
+        const out=[]; let from=0, step=1000; while(true){
+          const { data, error } = await aClient.from('players').select('player_id, username').range(from, from+step-1);
+          if (error) throw error; if (!data || data.length===0) break; out.push(...data); if (data.length<step) break; from+=step;
+        } return out;
+      }
+      async function fetchApprovedStudentsFromA(){
+        const out=[]; let from=0, step=1000; while(true){
+          const { data, error } = await aClient.from('students').select('student_id, name, player_id, student_code').not('student_code','is',null).order('name',{ascending:true}).range(from, from+step-1);
+          if (error) throw error; if (!data || data.length===0) break; out.push(...data); if (data.length<step) break; from+=step;
+        } return out;
+      }
+
+      async function upsertPlayersToC(rows){
+        if (!rows.length) return; const payload = rows.map(x=>({ player_id: x.player_id, player_name: x.username }));
+        const { error } = await adminClient.from('player_links').upsert(payload, { onConflict:'player_id' }); if (error) throw error;
+      }
+      async function upsertStudentsToC(rows){
+        if (!rows.length) return; const payload = rows.map(x=>({ student_id: x.student_id, student_name: x.name, player_id: x.player_id }));
+        const { error } = await adminClient.from('student_cache').upsert(payload, { onConflict:'student_id' }); if (error) throw error;
+      }
+
+      // 初次載入
+      loadT1();
+    }
+
+    // ------------------------
+    // TAP2：地區表 CRUD
+    // ------------------------
+    async function renderTab2(root){
+      const wrap = el('div', {class:'card'});
+      const form = el('div', {class:'grid grid-4'});
+      const f_name = el('input', {type:'text', placeholder:'地區顯示名稱'});
+      const f_type = el('select'); AREA_TYPES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
+      const f_thread = el('input', {type:'text', placeholder:'Discord Thread ID（可空）'});
+      const f_hook = el('input', {type:'text', placeholder:'Webhook URL（可空）'});
+      const f_limit = el('input', {type:'number', placeholder:'每日上限（愛校用，可空）'});
+      const addBtn = el('button',{class:'btn'},[document.createTextNode('新增地區')]);
+      form.append(f_name, f_type, f_thread, f_hook, f_limit, addBtn);
+
+      const list = el('div', {class:'table-wrap', style:'margin-top:10px'});
+      list.innerHTML = `<table><thead><tr><th>名稱</th><th>型別</th><th>Thread</th><th>Webhook</th><th>上限</th><th></th></tr></thead><tbody id="areasBody"></tbody></table>`;
+      wrap.append(el('div',{class:'row'},[el('strong',{text:'地區管理'}), el('span',{class:'chip',text:'area'})]), form, list);
+      root.append(wrap);
+
+      addBtn.addEventListener('click', async () => {
+        addBtn.disabled = true;
+        const { error } = await adminClient.from('area').insert({ area_name:f_name.value.trim(), area_type:f_type.value, dc_thread_id:f_thread.value||null, webhook_url:f_hook.value||null, daily_limit: f_limit.value? Number(f_limit.value): null });
+        addBtn.disabled = false; if (!error){ f_name.value=''; f_thread.value=''; f_hook.value=''; f_limit.value=''; loadAreas(); }
+      });
+
+      async function loadAreas(){
+        const { data, error } = await adminClient.from('area').select('*').order('area_name',{ascending:true});
+        const tb = $('#areasBody'); tb.innerHTML='';
+        (data||[]).forEach(r=>tb.appendChild(areaRow(r)));
+      }
+
+      function areaRow(r){
+        const tr = document.createElement('tr');
+        const name = el('input',{type:'text', value:r.area_name});
+        const type = el('select'); AREA_TYPES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.area_type) o.selected=true; type.appendChild(o); });
+        const t = el('input',{type:'text', value:r.dc_thread_id||''});
+        const w = el('input',{type:'text', value:r.webhook_url||''});
+        const lim = el('input',{type:'number', value: r.daily_limit==null?'':r.daily_limit});
+        const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+        const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+        tr.append(el('td',{},[name]), el('td',{},[type]), el('td',{},[t]), el('td',{},[w]), el('td',{},[lim]));
+        const tbtn = el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
+
+        save.addEventListener('click', async ()=>{
+          save.disabled=true;
+          const { error } = await adminClient.from('area').update({ area_name:name.value.trim(), area_type:type.value, dc_thread_id: t.value||null, webhook_url: w.value||null, daily_limit: lim.value? Number(lim.value): null }).eq('area_id', r.area_id);
+          save.disabled=false; if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+        });
+        del.addEventListener('click', async ()=>{
+          if (!confirm('確定刪除？')) return; const { error } = await adminClient.from('area').delete().eq('area_id', r.area_id); if (!error) tr.remove();
+        });
+        return tr;
+      }
+
+      loadAreas();
+    }
+
+    // ------------------------
+    // TAP3：時薪設定
+    // ------------------------
+    async function renderTab3(root){
+      const wrap = el('div',{class:'card'});
+      const work = el('input',{type:'number', placeholder:'一般打工預設時薪'});
+      const spec = el('input',{type:'number', placeholder:'特殊打工預設時薪'});
+      const save = el('button',{class:'btn'},[document.createTextNode('儲存設定')]);
+      const info = el('span',{class:'muted'});
+      wrap.append(el('div',{class:'row'},[el('strong',{text:'時薪設定'}), el('span',{class:'chip',text:'wage_config'})]));
+      const grid = el('div',{class:'grid grid-3'}); grid.append(work, spec, save); wrap.append(grid, el('div',{class:'help'},[document.createTextNode('config_id 固定為 1；只影響新建的打工紀錄。')]), info);
+      root.append(wrap);
+
+      async function load(){
+        const { data } = await adminClient.from('wage_config').select('*').eq('config_id',1).maybeSingle();
+        if (data){ work.value = data.work_wage_default; spec.value = data.special_wage_default; info.textContent = '最後更新：'+fmtTime(data.updated_at); }
+      }
+      save.addEventListener('click', async ()=>{
+        save.disabled=true; const body={ config_id:1, work_wage_default: Number(work.value||0), special_wage_default: Number(spec.value||0) };
+        const { error } = await adminClient.from('wage_config').upsert(body, { onConflict:'config_id' }); save.disabled=false; if(!error){ info.textContent='已儲存：'+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}); }
+      });
+      load();
+    }
+
+    // ------------------------
+    // TAP4：販售道具
+    // ------------------------
+    async function renderTab4(root){
+      const wrap = el('div',{class:'card'});
+      wrap.append(el('div',{class:'row'},[el('strong',{text:'販售道具'}), el('span',{class:'chip',text:'shop_items'})]));
+      const f = el('div',{class:'grid grid-4'});
+      const f_name = el('input',{type:'text', placeholder:'道具名稱'});
+      const f_desc = el('input',{type:'text', placeholder:'商家/商品簡介'});
+      const f_type = el('select'); CURRENCIES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
+      const f_price = el('input',{type:'number', placeholder:'售價'});
+      const f_stock = el('input',{type:'number', placeholder:'庫存'});
+      const f_effect = el('input',{type:'text', placeholder:'效果文字（可空）'});
+      const f_code = el('input',{type:'text', placeholder:'effect_code（可空）'});
+      const f_uses = el('input',{type:'number', placeholder:'可用次數（空=永久）'});
+      const add = el('button',{class:'btn'},[document.createTextNode('新增')]);
+      f.append(f_name,f_desc,f_type,f_price,f_stock,f_effect,f_code,f_uses,add);
+
+      const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
+      list.innerHTML = `<table><thead><tr><th>名稱</th><th>幣別</th><th>售價</th><th>庫存</th><th>效果</th><th>程式碼</th><th>可用次數</th><th></th></tr></thead><tbody id="shopBody"></tbody></table>`;
+      wrap.append(f, list); root.append(wrap);
+
+      add.addEventListener('click', async ()=>{
+        add.disabled=true; const body={ item_name:f_name.value.trim(), shop_desc:f_desc.value||null, price_type:f_type.value, price:Number(f_price.value||0), stock:Number(f_stock.value||0), item_effect:f_effect.value||null, effect_code:f_code.value||null, max_uses: f_uses.value? Number(f_uses.value): null };
+        const { error } = await adminClient.from('shop_items').insert(body); add.disabled=false; if(!error){ f_name.value=f_desc.value=f_effect.value=f_code.value=''; f_price.value=f_stock.value=f_uses.value=''; load(); }
+      });
+
+      async function load(){
+        const { data } = await adminClient.from('shop_items').select('*').order('item_name',{ascending:true});
+        const tb = $('#shopBody'); tb.innerHTML=''; (data||[]).forEach(r=>tb.appendChild(row(r)));
+      }
+      function row(r){
+        const tr = document.createElement('tr');
+        const name = el('input',{type:'text', value:r.item_name});
+        const type = el('select'); CURRENCIES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.price_type) o.selected=true; type.appendChild(o);});
+        const price = el('input',{type:'number', value:r.price});
+        const stock = el('input',{type:'number', value:r.stock});
+        const eff = el('input',{type:'text', value:r.item_effect||''});
+        const code = el('input',{type:'text', value:r.effect_code||''});
+        const uses = el('input',{type:'number', value: r.max_uses==null?'':r.max_uses});
+        const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+        const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+        tr.append(el('td',{},[name]), el('td',{},[type]), el('td',{},[price]), el('td',{},[stock]), el('td',{},[eff]), el('td',{},[code]), el('td',{},[uses]));
+        const tbtn = el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
+        save.addEventListener('click', async()=>{
+          save.disabled=true; const body={ item_name:name.value.trim(), price_type:type.value, price:Number(price.value||0), stock:Number(stock.value||0), item_effect:eff.value||null, effect_code:code.value||null, max_uses: uses.value? Number(uses.value): null };
+          const { error } = await adminClient.from('shop_items').update(body).eq('id', r.id); save.disabled=false; if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+        });
+        del.addEventListener('click', async()=>{ if(!confirm('確定刪除？')) return; const { error } = await adminClient.from('shop_items').delete().eq('id', r.id); if(!error) tr.remove(); });
+        return tr;
+      }
+      load();
+    }
+
+    // ------------------------
+    // TAP5：戰鬥攜帶物
+    // ------------------------
+    async function renderTab5(root){
+      const wrap = el('div',{class:'card'});
+      wrap.append(el('div',{class:'row'},[el('strong',{text:'戰鬥攜帶物'}), el('span',{class:'chip',text:'battle_items'})]));
+      const f = el('div',{class:'grid grid-4'});
+      const f_student = el('input',{type:'text', placeholder:'角色名稱（student_name）'});
+      const f_slot = el('input',{type:'number', placeholder:'欄位 1-4', min:1, max:4});
+      const f_name = el('input',{type:'text', placeholder:'裝備名稱'});
+      const f_effect = el('input',{type:'text', placeholder:'效果文字（可空）'});
+      const f_uses = el('input',{type:'number', placeholder:'剩餘可用次數（空=永久）'});
+      const f_lock = el('select'); ['false','true'].forEach(v=>f_lock.appendChild(el('option',{value:v,text: v==='true'?'裝備後鎖定':'可回收'})));
+      const add = el('button',{class:'btn'},[document.createTextNode('新增')]);
+      f.append(f_student,f_slot,f_name,f_effect,f_uses,f_lock,add);
+
+      const list = el('div',{class:'table-wrap',style:'margin-top:10px'});
+      list.innerHTML = `<table><thead><tr><th>角色</th><th>欄位</th><th>裝備</th><th>效果</th><th>可用次數</th><th>鎖定</th><th></th></tr></thead><tbody id="battleBody"></tbody></table>`;
+      wrap.append(f,list); root.append(wrap);
+
+      add.addEventListener('click', async ()=>{
+        add.disabled=true; const body={ student_name:f_student.value.trim(), slot:Number(f_slot.value||0), item_name:f_name.value.trim(), item_effect:f_effect.value||null, uses_left: f_uses.value? Number(f_uses.value): null, locked_until_broken: f_lock.value==='true' };
+        const { error } = await adminClient.from('battle_items').insert(body); add.disabled=false; if(!error){ f_student.value=f_slot.value=f_name.value=f_effect.value=f_uses.value=''; load(); }
+      });
+
+      async function load(){
+        const { data } = await adminClient.from('battle_items').select('*').order('student_name',{ascending:true}).order('slot',{ascending:true});
+        const tb=$('#battleBody'); tb.innerHTML=''; (data||[]).forEach(r=>tb.appendChild(row(r)));
+      }
+      function row(r){
+        const tr = document.createElement('tr');
+        const stu = el('input',{type:'text', value:r.student_name});
+        const slot = el('input',{type:'number', value:r.slot, min:1, max:4});
+        const name = el('input',{type:'text', value:r.item_name});
+        const eff = el('input',{type:'text', value:r.item_effect||''});
+        const uses = el('input',{type:'number', value: r.uses_left==null?'':r.uses_left});
+        const lock = el('select'); ['false','true'].forEach(v=>{ const o=el('option',{value:v,text: v==='true'?'鎖定':'可回收'}); if(String(r.locked_until_broken)===v) o.selected=true; lock.appendChild(o);});
+        const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+        const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+        tr.append(el('td',{},[stu]), el('td',{},[slot]), el('td',{},[name]), el('td',{},[eff]), el('td',{},[uses]), el('td',{},[lock]));
+        const tbtn=el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
+        save.addEventListener('click', async()=>{
+          save.disabled=true; const body={ student_name:stu.value.trim(), slot:Number(slot.value||0), item_name:name.value.trim(), item_effect:eff.value||null, uses_left: uses.value? Number(uses.value): null, locked_until_broken: lock.value==='true' };
+          const { error } = await adminClient.from('battle_items').update(body).eq('id', r.id); save.disabled=false; if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+        });
+        del.addEventListener('click', async()=>{ if(!confirm('確定刪除？')) return; const { error } = await adminClient.from('battle_items').delete().eq('id', r.id); if(!error) tr.remove(); });
+        return tr;
+      }
+      load();
+    }
+
+    // ------------------------
+    // TAP6：教師文本（僅學習地區）
+    // ------------------------
+    async function renderTab6(root){
+      const wrap = el('div',{class:'card'});
+      wrap.append(el('div',{class:'row'},[el('strong',{text:'教師文本'}), el('span',{class:'chip',text:'teacher_texts'})]));
+
+      // 先抓【學習】地區
+      const { data: areas } = await adminClient.from('area').select('area_id, area_name').eq('area_type','學習').order('area_name',{ascending:true});
+      const areaMap = new Map((areas||[]).map(a=>[a.area_id, a.area_name]));
+
+      const f = el('div',{class:'grid grid-4'});
+      const f_area = el('select'); (areas||[]).forEach(a=> f_area.appendChild(el('option',{value:a.area_id, text:a.area_name})) );
+      const f_course = el('input',{type:'text', placeholder:'課程名稱'});
+      const f_text = el('textarea',{placeholder:'老師回應內容（台詞）'});
+      const add = el('button',{class:'btn'},[document.createTextNode('新增')]);
+      f.append(f_area,f_course,f_text,add);
+
+      const list = el('div',{class:'table-wrap',style:'margin-top:10px'});
+      list.innerHTML = `<table><thead><tr><th>地區</th><th>課程</th><th>台詞</th><th></th></tr></thead><tbody id="teacherBody"></tbody></table>`;
+      wrap.append(f, list); root.append(wrap);
+
+      add.addEventListener('click', async ()=>{
+        add.disabled=true; const body={ area_id:f_area.value, course_name:f_course.value.trim(), reply_text:f_text.value };
+        const { error } = await adminClient.from('teacher_texts').insert(body); add.disabled=false; if(!error){ f_text.value=f_course.value=''; load(); }
+      });
+
+      async function load(){
+        const { data } = await adminClient.from('teacher_texts').select('*').order('area_id',{ascending:true}).order('course_name',{ascending:true});
+        const tb = $('#teacherBody'); tb.innerHTML=''; (data||[]).forEach(r=>tb.appendChild(row(r)));
+      }
+      function row(r){
+        const tr = document.createElement('tr');
+        const areaName = areaMap.get(r.area_id) || r.area_id;
+        const areaSpan = el('span',{text:areaName});
+        const course = el('input',{type:'text', value:r.course_name});
+        const text = el('textarea'); text.value = r.reply_text||''; text.style.minWidth='280px';
+        const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+        const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+        tr.append(el('td',{},[areaSpan]), el('td',{},[course]), el('td',{},[text]));
+        const tbtn=el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
+        save.addEventListener('click', async()=>{
+          save.disabled=true; const body={ course_name:course.value.trim(), reply_text:text.value };
+          const { error } = await adminClient.from('teacher_texts').update(body).eq('id', r.id); save.disabled=false; if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+        });
+        del.addEventListener('click', async()=>{ if(!confirm('確定刪除？')) return; const { error } = await adminClient.from('teacher_texts').delete().eq('id', r.id); if(!error) tr.remove(); });
+        return tr;
+      }
+      load();
+    }
+
+    // ------------------------
+    // 初始化
+    // ------------------------
+    showUIBySession();
+  </script>
 </body>
 </html>
