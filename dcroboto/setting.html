@@ -187,6 +187,17 @@
     };
     const fmtTime = (s)=> s? new Date(s).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' }) : '-';
 
+    // 讀商品（用於 TAB7 下拉與自動帶幣別/價格/庫存）
+async function loadShopItems(){
+  const { data, error } = await adminClient
+    .from('shop_items')
+    .select('item_name, price_type, price, stock')
+    .order('item_name',{ascending:true});
+  if (error) { console.warn('[loadShopItems]', error); return []; }
+  return data || [];
+}
+
+
     // ===== 學生下拉快取 =====
     let STUDENT_OPTIONS = [];
     async function loadStudentNames() {
@@ -946,109 +957,184 @@ info.textContent =
     }
 
 // ------------------------
-// TAP7：交易紀錄（活動獎勵 / 折扣 / 購買）
-// item = shop_items.item_name 或 NULL
-// 插入 transaction_log 後，DB Trigger 會：若 item != NULL → shop_items.stock -1、inventory +1
+// TAP7：交易紀錄（可選道具 → 自動帶幣別/金額，並走 RPC 購買）
 // ------------------------
 async function renderTab7(root){
-  await loadStudentNames(); // 取學生下拉
+  await loadStudentNames();                 // 供學生下拉
+  const items = await loadShopItems();      // 供道具下拉 + 自動帶入
 
-  // 取可選道具（只顯示庫存 > 0 比較直覺，你也可改成全部顯示）
-  const { data: items } = await adminClient
-    .from('shop_items')
-    .select('item_name, stock')
-    .order('item_name', { ascending:true });
-
-  const wrap = el('div', {class:'card'});
+  const wrap = el('div',{class:'card'});
   wrap.append(el('div',{class:'row'},[
     el('strong',{text:'交易紀錄'}),
     el('span',{class:'chip',text:'transaction_log'})
   ]));
 
-  // 表單欄位
-  const f_student  = makeStudentSelect(); // 學生
-  const f_action   = el('input', {type:'text', placeholder:'動作說明（例：活動獎勵／購買商品）'});
-  const f_currency = el('select'); CURRENCIES.forEach(v => f_currency.appendChild(el('option',{value:v,text:v})));
-  const f_sign     = el('select'); [{v:'credit',t:'增加(入帳)'},{v:'debit',t:'扣除(出帳)'}].forEach(o=>f_sign.appendChild(el('option',{value:o.v,text:o.t})));
-  const f_amount   = el('input', {type:'number', min:0, placeholder:'金額'});
+  // ===== 表單 =====
+  const form = el('div',{class:'grid grid-4'});
 
-  const f_item     = el('select');
-  // 第一個選項：無道具（= NULL）
-  f_item.appendChild(el('option',{value:'',text:'（無道具）'}));
-  (items||[]).forEach(it=>{
-    // 你若只想列出有庫存的，可加條件 (it.stock > 0)
-    f_item.appendChild(el('option',{value:it.item_name, text:`${it.item_name}${(it.stock!=null?`（庫存${it.stock}）`:'')}`}));
+  // 學生
+  const f_student = makeStudentSelect();
+
+  // 道具（可不選）
+  const f_item = document.createElement('select');
+  const o0 = document.createElement('option'); o0.value=''; o0.textContent='— 不選道具（純金流）—'; f_item.appendChild(o0);
+  items.forEach(x=>{
+    const o=document.createElement('option');
+    o.value = x.item_name;
+    o.textContent = `${x.item_name}（${x.price_type} ${x.price}｜庫存${x.stock}）`;
+    f_item.appendChild(o);
   });
 
-  const btn = el('button',{class:'btn'},[document.createTextNode('新增交易')]);
+  // 數量（買道具用；純金流可忽略）
+  const f_qty = el('input',{type:'number', min:1, value:1, placeholder:'數量（買道具用）'});
+
+  // 動作敘述
+  const f_action = el('input',{type:'text', placeholder:'動作/備註（例：購買道具／活動獎勵）'});
+
+  // 交易幣別與金額（若選道具 → 自動帶入並鎖定）
+  const f_cur = document.createElement('select'); CURRENCIES.forEach(v=>f_cur.appendChild(el('option',{value:v,text:v})));
+  const f_amount = el('input',{type:'number', min:0, placeholder:'金額'});
+
+  // 收支（debit=扣除、credit=增加）
+  const f_mode = document.createElement('select');
+  f_mode.appendChild(el('option',{value:'debit', text:'扣除（debit）'}));
+  f_mode.appendChild(el('option',{value:'credit',text:'增加（credit）'}));
+
+  const btnAdd   = el('button',{class:'btn'},[document.createTextNode('新增交易')]);
+  const btnReload= el('button',{class:'btn secondary'},[document.createTextNode('重新載入')]);
   const msg = el('span',{class:'muted'});
 
-  const form = el('div',{class:'grid grid-4'});
-  form.append(f_student, f_action, f_currency, f_sign, f_amount, f_item, btn);
-  wrap.append(form, el('div',{class:'help',text:'選了道具後：會自動扣 shop_items 庫存 1 並把道具加到該學生的背包'}), msg);
-  root.append(wrap);
+  form.append(f_student, f_item, f_qty, f_action, f_cur, f_amount, f_mode, btnAdd, btnReload, msg);
+  wrap.append(form);
 
-  // 一覽（最近 50 筆）
+  // ===== 一覽 =====
   const list = el('div',{class:'table-wrap',style:'margin-top:10px'});
   list.innerHTML = `
     <table>
-      <thead><tr>
-        <th>時間</th><th>學生</th><th>幣別</th><th>＋入帳</th><th>－出帳</th><th>道具</th><th>說明</th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <th>時間</th><th>學生</th><th>動作</th><th>幣別</th><th>變動</th><th>道具</th>
+        </tr>
+      </thead>
       <tbody id="txBody"></tbody>
     </table>`;
-  root.append(list);
+  root.append(wrap, list);
 
-  btn.addEventListener('click', async ()=>{
-    const amount = Number(f_amount.value||0);
-    if (!amount || amount < 0) { msg.textContent = '請輸入正確金額'; return; }
+  // --- 當選了道具 → 自動帶幣別/金額/收支（扣款），並鎖定欄位 ---
+  function applyItemAutoFill(){
+    const name = f_item.value;
+    const qty  = Math.max(1, Number(f_qty.value||1));
+    const row  = items.find(x => x.item_name === name);
+    if (name && row){
+      f_cur.value    = row.price_type;
+      f_amount.value = String(row.price * qty);
+      f_mode.value   = 'debit';               // 道具 → 扣款
+      // 鎖定，避免手滑
+      f_cur.disabled    = true;
+      f_amount.disabled = true;
+      f_mode.disabled   = true;
+    }else{
+      f_cur.disabled = false;
+      f_amount.disabled = false;
+      f_mode.disabled = false;
+    }
+  }
+  f_item.addEventListener('change', applyItemAutoFill);
+  f_qty.addEventListener('input',  applyItemAutoFill);
 
-    const body = {
-      student_name: f_student.value,
-      action: (f_action.value||'').trim() || '手動交易',
-      type: f_currency.value,              // enum：一般貨幣／謝爾夏貨幣／愛校點數
-      debit:  (f_sign.value==='debit')  ? amount : 0,
-      credit: (f_sign.value==='credit') ? amount : 0,
-      item: f_item.value || null          // '' → NULL
-    };
+  // --- 新增交易 ---
+  btnAdd.addEventListener('click', async ()=>{
+    btnAdd.disabled = true; msg.textContent = '處理中…';
+    try{
+      const student = f_student.value;
+      const action  = (f_action.value || '').trim();
 
-    btn.disabled = true; msg.textContent = '寫入中…';
-    const { error } = await adminClient.from('transaction_log').insert(body).select('id').single();
-    btn.disabled = false;
+      // 1) 有選道具 → 走 RPC（原子：扣款 + 扣庫存 + 背包 +1）
+      if (f_item.value){
+        const qty = Math.max(1, Number(f_qty.value || 1));
+        const { error } = await adminClient.rpc('buy_shop_item', {
+          p_student_name: student,
+          p_item_name: f_item.value,
+          p_qty: qty,
+          p_action: action || '購買道具'
+        });
+        if (error) throw error;
+        msg.textContent = '已購買並記帳完成';
+      }else{
+      // 2) 純金流 → 寫 transaction_log（item=null）
+        const v = Math.max(0, Number(f_amount.value||0));
+        const body = {
+          student_name: student,
+          action: action || '手動調整',
+          type: f_cur.value,
+          debit:  (f_mode.value === 'debit')  ? v : 0,
+          credit: (f_mode.value === 'credit') ? v : 0,
+          item: null
+        };
+        const { error } = await adminClient.from('transaction_log').insert(body);
+        if (error) throw error;
+        msg.textContent = '已新增交易';
+      }
 
-    if (error) {
-      msg.textContent = '失敗：' + (error.message || '');
-    } else {
-      msg.textContent = '完成！(已寫入交易；如有道具會自動扣庫存與加背包)';
-      f_action.value=''; f_amount.value='';
-      await loadList(); // 重新載入下方一覽
+      // 重置表單（保留學生以利連續操作）
+      f_item.value=''; f_qty.value=1; f_action.value='';
+      f_amount.value=''; f_cur.disabled=f_amount.disabled=f_mode.disabled=false;
+      await reloadLists();                  // 重新整理列表與商品庫存顯示
+    }catch(e){
+      console.error(e);
+      msg.textContent = '失敗：' + (e.message || e);
+    }finally{
+      btnAdd.disabled = false;
     }
   });
 
-  async function loadList(){
+  btnReload.addEventListener('click', reloadLists);
+
+  // --- 列表載入 ---
+  async function reloadLists(){
+    // 重新拉商品（更新庫存提示）
+    const latest = await loadShopItems();
+    items.length = 0; latest.forEach(x=>items.push(x));
+    // 也把下拉顯示更新（不破壞當前選擇就好，這裡簡化：重建一次）
+    const keep = f_item.value;
+    f_item.innerHTML = '';
+    const o0 = document.createElement('option'); o0.value=''; o0.textContent='— 不選道具（純金流）—'; f_item.appendChild(o0);
+    items.forEach(x=>{
+      const o=document.createElement('option');
+      o.value = x.item_name;
+      o.textContent = `${x.item_name}（${x.price_type} ${x.price}｜庫存${x.stock}）`;
+      if (x.item_name === keep) o.selected = true;
+      f_item.appendChild(o);
+    });
+    applyItemAutoFill();
+
+    // 最新 100 筆交易
     const { data, error } = await adminClient
       .from('transaction_log')
-      .select('created_at, student_name, type, debit, credit, item, action')
-      .order('created_at', { ascending:false })
-      .limit(50);
-    const tb = document.getElementById('txBody'); tb.innerHTML='';
-    if (error) { tb.innerHTML = `<tr><td colspan="7" class="err">讀取失敗：${error.message}</td></tr>`; return; }
+      .select('id, created_at, student_name, action, type, debit, credit, item')
+      .order('created_at',{ascending:false})
+      .limit(100);
+    const tb = $('#txBody'); tb.innerHTML='';
+    if (error){ tb.innerHTML = `<tr><td colspan="6" class="err">讀取失敗：${error.message}</td></tr>`; return; }
+
     (data||[]).forEach(r=>{
       const tr = document.createElement('tr');
+      const delta = (r.credit && r.credit>0) ? `+${r.credit}` : (r.debit && r.debit>0) ? `-${r.debit}` : '0';
       tr.innerHTML = `
         <td>${fmtTime(r.created_at)}</td>
         <td>${r.student_name}</td>
-        <td>${r.type}</td>
-        <td>${r.credit||0}</td>
-        <td>${r.debit||0}</td>
-        <td>${r.item || '-'}</td>
-        <td>${r.action || '-'}</td>
+        <td>${r.action||'-'}</td>
+        <td>${r.type||'-'}</td>
+        <td>${delta}</td>
+        <td>${r.item||''}</td>
       `;
       tb.appendChild(tr);
     });
   }
 
-  loadList();
+  // 初次載入
+  applyItemAutoFill();
+  reloadLists();
 }
 
 
