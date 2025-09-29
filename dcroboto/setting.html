@@ -28,7 +28,7 @@
     .auth-wrap { max-width:420px; margin:40px auto; background:#fff; padding:20px; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
     .auth-title { text-align:center; font-weight:700; margin-bottom:10px; }
     .field { display:flex; flex-direction:column; gap:6px; margin:10px 0; }
-    input[type=text], input[type=password], input[type=number], select, textarea { padding:8px 10px; border:1px solid #d7e3ef; border-radius:8px; background:#fff; font-size:14px; color:#143158; }
+    input[type=text], input[type=password], input[type=number], select, textarea { padding:8px 6px; border:1px solid #d7e3ef; border-radius:8px; background:#fff; font-size:14px; color:#143158; }
     textarea { min-height:80px; }
     .btn { border:none; background:#1767a0; color:#fff; padding:8px 12px; border-radius:8px; font-weight:700; cursor:pointer; box-shadow:0 1px 4px #0001; }
     .btn.secondary { background:#e9f1f9; color:#143158; }
@@ -71,14 +71,15 @@ td input, td select {
   width: 100%;      /* ★ 讓格子內的輸入框撐滿格子，不會超過 */
   box-sizing: border-box; /* 包含 padding，不會再往外撐 */
 }
-th:nth-child(1), td:nth-child(1) { width: 20%; } /* 名稱 */
-th:nth-child(2), td:nth-child(2) { width: 10%; } /* 幣別 */
-th:nth-child(3), td:nth-child(3) { width: 5%; } /* 售價 */
-th:nth-child(4), td:nth-child(4) { width: 5%; } /* 庫存 */
-th:nth-child(5), td:nth-child(5) { width: 30%; } /* 效果 */
-th:nth-child(6), td:nth-child(6) { width: 15%; } /* 程式碼 */
-th:nth-child(7), td:nth-child(7) { width: 5%; } /* 可用次數 */
-th:nth-child(8), td:nth-child(8) { width: 10%;  } /* 操作按鈕 */
+th:nth-child(1), td:nth-child(1) { width: 15%; } /* 名稱 */
+th:nth-child(2), td:nth-child(2) { width: 8%; } /* 文案 */
+th:nth-child(2), td:nth-child(3) { width: 8%; } /* 幣別 */
+th:nth-child(3), td:nth-child(4) { width: 8%; } /* 售價 */
+th:nth-child(4), td:nth-child(5) { width: 8%; } /* 庫存 */
+th:nth-child(5), td:nth-child(6) { width: 25%; } /* 效果 */
+th:nth-child(6), td:nth-child(7) { width: 15%; } /* 程式碼 */
+th:nth-child(7), td:nth-child(8) { width: 8%; } /* 可用次數 */
+th:nth-child(8), td:nth-child(9) { width: 5%;  } /* 操作按鈕 */
   </style>
 </head>
 <body>
@@ -440,8 +441,7 @@ th:nth-child(8), td:nth-child(8) { width: 10%;  } /* 操作按鈕 */
       f.append(f_name,f_desc,f_type,f_price,f_stock,f_effect,f_code,f_uses,add);
 
       const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
-      list.innerHTML = `<table><thead><tr><th>名稱</th><th>幣別</th><th>售價</th><th>庫存</th><th>效果</th><th>程式碼</th><th>可用次數</th><th></th></tr></thead><tbody id="shopBody"></tbody></table>`;
-      wrap.append(f, list); root.append(wrap);
+list.innerHTML = `<table><thead><tr><th>名稱</th><th>簡介</th><th>幣別</th><th>售價</th><th>庫存</th><th>效果</th><th>程式碼</th><th>可用次數</th><th></th></tr></thead><tbody id="shopBody"></tbody></table>`;      wrap.append(f, list); root.append(wrap);
 
       add.addEventListener('click', async ()=>{
         add.disabled=true; const body={ item_name:f_name.value.trim(), shop_desc:f_desc.value||null, price_type:f_type.value, price:Number(f_price.value||0), stock:Number(f_stock.value||0), item_effect:f_effect.value||null, effect_code:f_code.value||null, max_uses: f_uses.value? Number(f_uses.value): null };
@@ -453,25 +453,29 @@ th:nth-child(8), td:nth-child(8) { width: 10%;  } /* 操作按鈕 */
         const tb = $('#shopBody'); tb.innerHTML=''; (data||[]).forEach(r=>tb.appendChild(row(r)));
       }
       function row(r){
-        const tr = document.createElement('tr');
-        const name = el('input',{type:'text', value:r.item_name});
-        const type = el('select'); CURRENCIES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.price_type) o.selected=true; type.appendChild(o);});
-        const price = el('input',{type:'number', value:r.price});
-        const stock = el('input',{type:'number', value:r.stock});
-        const eff = el('input',{type:'text', value:r.item_effect||''});
-        const code = el('input',{type:'text', value:r.effect_code||''});
-        const uses = el('input',{type:'number', value: r.max_uses==null?'':r.max_uses});
-        const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
-        const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
-        tr.append(el('td',{},[name]), el('td',{},[type]), el('td',{},[price]), el('td',{},[stock]), el('td',{},[eff]), el('td',{},[code]), el('td',{},[uses]));
-        const tbtn = el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
-        save.addEventListener('click', async()=>{
-          save.disabled=true; const body={ item_name:name.value.trim(), price_type:type.value, price:Number(price.value||0), stock:Number(stock.value||0), item_effect:eff.value||null, effect_code:code.value||null, max_uses: uses.value? Number(uses.value): null };
-          const { error } = await adminClient.from('shop_items').update(body).eq('id', r.id); save.disabled=false; if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
-        });
-        del.addEventListener('click', async()=>{ if(!confirm('確定刪除？')) return; const { error } = await adminClient.from('shop_items').delete().eq('id', r.id); if(!error) tr.remove(); });
-        return tr;
-      }
+const tr = document.createElement('tr');
+const name = el('input',{type:'text', value:r.item_name});
+const desc = el('input',{type:'text', value:r.shop_desc||''});
+const type = el('select'); CURRENCIES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.price_type) o.selected=true; type.appendChild(o);});
+const price = el('input',{type:'number', value:r.price});
+const stock = el('input',{type:'number', value:r.stock});
+const eff = el('input',{type:'text', value:r.item_effect||''});
+const code = el('input',{type:'text', value:r.effect_code||''});
+const uses = el('input',{type:'number', value: r.max_uses==null?'':r.max_uses});
+const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+tr.append(el('td',{},[name]), el('td',{},[desc]), el('td',{},[type]), el('td',{},[price]), el('td',{},[stock]), el('td',{},[eff]), el('td',{},[code]), el('td',{},[uses]));
+const tbtn = el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
+save.addEventListener('click', async()=>{
+save.disabled=true;
+const body={ item_name:name.value.trim(), shop_desc:desc.value||null, price_type:type.value, price:Number(price.value||0), stock:Number(stock.value||0), item_effect:eff.value||null, effect_code:code.value||null, max_uses: uses.value? Number(uses.value): null };
+const { error } = await adminClient.from('shop_items').update(body).eq('id', r.id);
+save.disabled=false;
+if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+});
+del.addEventListener('click', async()=>{ if(!confirm('確定刪除？')) return; const { error } = await adminClient.from('shop_items').delete().eq('id', r.id); if(!error) tr.remove(); });
+return tr;
+}
       load();
     }
 
