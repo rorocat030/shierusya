@@ -896,10 +896,8 @@ async function renderTab3(root){
       load();
     }
 
-   // ------------------------
-// TAP7：交易紀錄（transaction_log）
-// 欄位：student_name, action(文字), type(幣別), debit, credit, item(可空), created_at
-// UI：下拉學生 / 動作說明 / 幣別 / 入帳或扣款 / 金額 / 物品(可空)
+ // ------------------------
+// ✅ TAP7：交易紀錄（獎勵/扣款）— 1.0 UI + 改良邏輯
 // ------------------------
 async function renderTab7(root){
   await loadStudentNames();
@@ -910,99 +908,159 @@ async function renderTab7(root){
     el('span',{class:'chip',text:'transaction_log'})
   ]));
 
-  const f = el('div',{class:'grid grid-4'});
-
+  // --- 新增交易（沿用 1.0 風格） ---
+  const form = el('div',{class:'grid grid-4'});
   const f_student = makeStudentSelect();
-  const f_action  = el('input',{type:'text', placeholder:'動作說明（例如：活動獎勵／手動調整）'});
-  const f_type    = el('select');            // 幣別
-  ['一般貨幣','謝爾夏貨幣','愛校點數'].forEach(v=>{
-    f_type.appendChild(el('option',{value:v, text:v}));
-  });
+  const f_action  = el('input',{type:'text', placeholder:'行動/說明（可空）'});
+  const f_curr    = el('select'); CURRENCIES.forEach(v=>f_curr.appendChild(el('option',{value:v,text:v})));
+  const f_dir     = el('select'); [{v:'credit',t:'新增(+)'},{v:'debit',t:'扣除(-)'}].forEach(o=>f_dir.appendChild(el('option',{value:o.v,text:o.t})));
+  const f_amt     = el('input',{type:'number', placeholder:'金額', min:1, step:'1'});
+  const f_item    = el('input',{type:'text', placeholder:'項目/來源（可空）'});
+  const addBtn    = el('button',{class:'btn'},[document.createTextNode('新增交易')]);
+  form.append(f_student, f_action, f_curr, f_dir, f_amt, f_item, addBtn);
 
-  const f_mode    = el('select');            // 入帳/扣款
-  [['credit','入帳（加）'],['debit','扣款（減）']].forEach(([v,t])=>{
-    f_mode.appendChild(el('option',{value:v, text:t}));
-  });
+  // --- 一覽 + 篩選（沿用 1.0 風格） ---
+  const filters = el('div',{class:'toolbar'});
+  const ft_student = makeStudentFilterSelect('');
+  const ft_curr    = document.createElement('select');
+  const optAll = document.createElement('option'); optAll.value=''; optAll.textContent='（全部幣別）'; ft_curr.appendChild(optAll);
+  CURRENCIES.forEach(v=>ft_curr.appendChild(el('option',{value:v,text:v})));
+  const ft_kw      = el('input',{type:'text', placeholder:'搜尋行動/項目…'});
+  const reloadBtn  = el('button',{class:'btn secondary small'},[document.createTextNode('重新載入')]);
+  filters.append(reloadBtn, ft_kw, ft_curr, ft_student);
 
-  const f_amount  = el('input',{type:'number', min:0, placeholder:'金額/點數'});
-  const f_item    = el('input',{type:'text', placeholder:'關聯物品（可空）'});
-
-  const add = el('button',{class:'btn'},[document.createTextNode('新增交易')]);
-  f.append(f_student, f_action, f_type, f_mode, f_amount, f_item, add);
-
-  const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
-  list.innerHTML = `
+  // --- 表格（顯示 delta +/-） ---
+  const tableWrap = el('div',{class:'table-wrap', style:'margin-top:10px'});
+  tableWrap.innerHTML = `
     <table>
       <thead>
         <tr>
-          <th>時間</th><th>學生</th><th>幣別</th>
-          <th>入帳</th><th>扣款</th><th>動作</th><th>物品</th><th></th>
+          <th>時間</th><th>學生</th><th>幣別</th><th>變動</th><th>行動</th><th>項目</th><th></th>
         </tr>
       </thead>
-      <tbody id="txnBody"></tbody>
+      <tbody id="txBody"></tbody>
     </table>`;
-  wrap.append(f, list);
+  wrap.append(form, filters, tableWrap);
   root.append(wrap);
 
-  add.addEventListener('click', async ()=>{
-    add.disabled = true;
-    const amt = Math.max(0, Number(f_amount.value || 0));
-    const body = {
-      student_name: f_student.value,
-      action: (f_action.value || '').trim() || '手動調整',
-      type: f_type.value,          // ★ 對應你的欄位名：type
-      debit:  f_mode.value==='debit'  ? amt : 0,
-      credit: f_mode.value==='credit' ? amt : 0,
-      item: f_item.value || null
-    };
-    const { error } = await adminClient.from('transaction_log').insert(body);
-    add.disabled = false;
-    if (!error) {
-      f_action.value=''; f_amount.value=''; f_item.value='';
-      load();
+  // --- 新增交易：加入驗證、錯誤處理 ---
+  addBtn.addEventListener('click', async ()=>{
+    const amt = Number(f_amt.value);
+    if (!f_curr.value)    return alert('請選幣別');
+    if (!f_student.value) return alert('請選學生');
+    if (!amt || amt <= 0) return alert('金額需為正數');
+
+    addBtn.disabled = true;
+    try {
+      const body = {
+        student_name: f_student.value,
+        action: (f_action.value || '').trim() || '手動調整',
+        type: f_curr.value,
+        credit: f_dir.value==='credit' ? amt : 0,
+        debit:  f_dir.value==='debit'  ? amt : 0,
+        item: (f_item.value || '').trim() || null
+      };
+      const { error } = await adminClient.from('transaction_log').insert(body);
+      if (error) throw error;
+
+      f_action.value=''; f_item.value=''; f_amt.value='';
+      await loadTx();
+    } catch (e) {
+      alert('新增失敗：' + (e.message || e));
+    } finally {
+      addBtn.disabled = false;
     }
   });
 
-  async function load(){
-    const { data, error } = await adminClient
+  // --- 篩選：即時 server 端過濾 + debounce ---
+  reloadBtn.addEventListener('click', loadTx);
+  ft_student.addEventListener('change', loadTx);
+  ft_curr.addEventListener('change', loadTx);
+
+  let kwTimer = null;
+  ft_kw.addEventListener('input', ()=>{
+    clearTimeout(kwTimer);
+    kwTimer = setTimeout(loadTx, 300); // 避免連發 API
+  });
+
+  // --- 避免回應亂序：只採用最後一次請求結果 ---
+  let lastLoadId = 0;
+
+  async function loadTx(){
+    const myLoadId = ++lastLoadId;
+    const tb = $('#txBody');
+    tb.innerHTML = `<tr><td colspan="7">載入中…</td></tr>`;
+
+    let q = adminClient
       .from('transaction_log')
-      .select('id, student_name, action, type, debit, credit, item, created_at')
+      .select('id, created_at, student_name, type, credit, debit, action, item')
       .order('created_at',{ascending:false})
-      .limit(200);
-    const tb = $('#txnBody'); tb.innerHTML='';
-    if (error) {
-      tb.innerHTML = `<tr><td colspan="8" class="err">讀取失敗：${error.message}</td></tr>`;
-      return;
+      .limit(300);
+
+    if (ft_student.value) q = q.eq('student_name', ft_student.value);
+    if (ft_curr.value)    q = q.eq('type', ft_curr.value);
+
+    const kw = (ft_kw.value || '').trim();
+    if (kw) {
+      // server 端簡單搜尋：action 或 item（1.0 的用法）
+      q = q.or(`action.ilike.%${kw}%,item.ilike.%${kw}%`);
+      // 若 item 常為 NULL，需在 DB 端用 COALESCE(item,'') 建索引或調整寫入為 ''。
     }
-    (data||[]).forEach(r=>tb.appendChild(row(r)));
+
+    try {
+      const { data, error } = await q;
+      if (myLoadId !== lastLoadId) return; // 有更新版結果，丟棄這次
+      if (error) throw error;
+
+      const frag = document.createDocumentFragment();
+      (data || []).forEach(r => frag.appendChild(txRow(r)));
+      tb.innerHTML = '';
+      tb.appendChild(frag);
+    } catch (e) {
+      tb.innerHTML = `<tr><td colspan="7" class="err">讀取錯誤：${e.message || e}</td></tr>`;
+    }
   }
 
-  function row(r){
+  function txRow(r){
     const tr = document.createElement('tr');
-    const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+
+    const delta = (r.credit||0) - (r.debit||0);
+    const deltSpan = document.createElement('span');
+    deltSpan.className = 'delta ' + (delta>=0 ? 'plus' : 'minus');
+    deltSpan.textContent = (delta>=0? '+' : '') + String(delta);
+
+    const delBtn = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
 
     tr.innerHTML = `
       <td>${fmtTime(r.created_at)}</td>
       <td>${r.student_name}</td>
       <td>${r.type}</td>
-      <td>${r.credit||0}</td>
-      <td>${r.debit||0}</td>
+      <td></td>
       <td>${r.action||''}</td>
       <td>${r.item||''}</td>
+      <td></td>
     `;
-    const tdBtn = document.createElement('td');
-    tdBtn.append(del);
-    tr.appendChild(tdBtn);
+    tr.children[3].appendChild(deltSpan);
+    tr.children[6].appendChild(delBtn);
 
-    del.addEventListener('click', async ()=>{
-      if (!confirm('確定刪除這筆交易？')) return;
-      const { error } = await adminClient.from('transaction_log').delete().eq('id', r.id);
-      if (!error) tr.remove();
+    delBtn.addEventListener('click', async ()=>{
+      if (!confirm('確定刪除此筆交易？')) return;
+      delBtn.disabled = true;
+      try {
+        const { error } = await adminClient.from('transaction_log').delete().eq('id', r.id);
+        if (error) throw error;
+        tr.remove();
+      } catch (e) {
+        alert('刪除失敗：' + (e.message || e));
+      } finally {
+        delBtn.disabled = false;
+      }
     });
+
     return tr;
   }
 
-  load();
+  loadTx();
 }
 
 
