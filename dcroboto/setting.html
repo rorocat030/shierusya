@@ -960,225 +960,231 @@ info.textContent =
 let SHOP_CACHE = [];
 const getShopByName = (name) => SHOP_CACHE.find(i => i.item_name === name) || null;
 
-// ====== TAP7：交易紀錄（一般加減值／購買道具）======
+// ===== TAP7：交易 / 商店 =====
 async function renderTab7(root){
-  // 先準備資料
-  await loadStudentNames();                 // 學生下拉
-  SHOP_CACHE = await loadShopItems();       // 商品快取
+  // 先準備學生、商品
+  await loadStudentNames();
+  let SHOP_ITEMS = await loadShopItems();                         // [{item_name, price_type, price, stock}, ...]
+  const itemMap = new Map((SHOP_ITEMS||[]).map(i => [i.item_name, i]));
 
-  const wrap = el('div', {class:'card'});
+  // UI：外框
+  const wrap = el('div',{class:'card'});
   wrap.append(el('div',{class:'row'},[
-    el('strong',{text:'交易紀錄 / 購買道具'}),
-    el('span',{class:'chip', text:'transaction_log'})
+    el('strong',{text:'交易 / 商店'}),
+    el('span',{class:'chip',text:'transaction_log & student_wallet & shop_items'})
   ]));
 
-  // ======= 表單（新增交易 / 購買）=======
-  const form = el('div', {class:'grid grid-4'});
+  // ===== 表單欄位 =====
+  const form = el('div',{class:'grid grid-4'});
 
   // 學生
   const f_student = makeStudentSelect();
 
-  // 行動 / 註記（會寫進 transaction_log.action，或當作 buy_shop_item 的 p_action）
-  const f_action = el('input',{type:'text', placeholder:'行動（例如：REWARD / ADJUST / BUY）'});
+  // 行動（寫進 transaction_log.action；購買預設會用 BUY，你也可改）
+  const f_action  = el('input',{type:'text', placeholder:'行動（例：活動獎勵 / BUY）'});
 
-  // 道具（可無）
-  const f_item = document.createElement('select');
-  // 第一個空選項 = 無道具交易
-  f_item.appendChild(el('option',{value:'', text:'（無道具）'}));
-  SHOP_CACHE.forEach(s=>{
-    const o = el('option',{
-      value: s.item_name,
-      text: `${s.item_name}｜$${s.price}｜${s.price_type}｜庫存:${s.stock}`
-    });
-    f_item.appendChild(o);
+  // 道具（可空 = 一般交易）
+  const f_item = el('select');
+  // option: 空 -> 一般交易
+  f_item.appendChild(el('option',{value:'', text:'（無道具：一般交易）'}));
+  (SHOP_ITEMS||[]).forEach(it=>{
+    const label = `${it.item_name}｜${it.price_type} ${it.price}（庫存 ${it.stock}）`;
+    f_item.appendChild(el('option',{value:it.item_name, text:label}));
   });
 
-  // 數量（僅購買時使用）
-  const f_qty = el('input',{type:'number', placeholder:'數量（購買道具用）', min:1, value:1});
+  // 數量（購買才用到）
+  const f_qty  = el('input',{type:'number', placeholder:'數量（購買用）', min:1, value:1});
 
-  // 幣別（一般加減值用；若選了道具會自動帶入並鎖定）
-  const f_currency = document.createElement('select');
-  CURRENCIES.forEach(v=> f_currency.appendChild(el('option',{value:v,text:v})));
+  // 幣別（一般交易用；購買時會自動帶入並鎖定）
+  const f_curr = el('select'); CURRENCIES.forEach(v=> f_curr.appendChild(el('option',{value:v, text:v})));
 
-  // 方向（加值=credit；扣款=debit）
-  const f_dir = document.createElement('select');
-  [
-    ['credit','加值（收入）'],
-    ['debit','扣款（支出）']
-  ].forEach(([val,label]) => f_dir.appendChild(el('option',{value:val, text:label})));
+  // 方向 = 加/扣（一般交易用；購買時會自動設為「扣除」並鎖定）
+  const f_dir  = el('select');
+  f_dir.appendChild(el('option',{value:'credit', text:'增加（+）'}));
+  f_dir.appendChild(el('option',{value:'debit',  text:'扣除（-）'}));
 
-  // 金額（一般加減值用；若選了道具會用 單價×數量 並鎖定）
-  const f_amount = el('input',{type:'number', placeholder:'金額', min:0});
+  // 金額（一般交易用；購買時 = 單價×數量，並鎖定）
+  const f_amount = el('input',{type:'number', placeholder:'金額', min:1});
 
-  const btn_addTx = el('button',{class:'btn'},[document.createTextNode('寫入交易（不含道具）')]);
-  const btn_buy   = el('button',{class:'btn secondary'},[document.createTextNode('購買道具')]);
-  const msg       = el('div',{class:'help'});
+  // 送出
+  const btnGo   = el('button',{class:'btn'},[document.createTextNode('送出交易')]);
+  const msg     = el('span',{class:'muted'});
 
-  form.append(
-    el('div',{},[f_student]),
-    el('div',{},[f_action]),
-    el('div',{},[f_item]),
-    el('div',{},[f_qty]),
-    el('div',{},[f_currency]),
-    el('div',{},[f_dir]),
-    el('div',{},[f_amount]),
-    el('div',{},[btn_addTx, document.createTextNode(' '), btn_buy]),
-  );
-  wrap.append(form, msg);
+  // 目前餘額
+  const walletBox = el('div',{class:'help', text:'餘額：--'});
 
+  form.append(f_student, f_action, f_item, f_qty, f_curr, f_dir, f_amount, btnGo);
+  wrap.append(form, walletBox, msg);
 
-  // ====== 交易列表（最近 100 筆，可依學生過濾） ======
+  // ===== 交易列表 =====
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
-    <div class="toolbar">
-      <span class="spacer"></span>
-      <label class="help">只看此學生</label>
-      <input id="t7OnlyThis" type="checkbox" />
-      <button class="btn small" id="t7Reload">重新載入</button>
-    </div>
     <table>
       <thead>
-        <tr><th>時間</th><th>學生</th><th>行動</th><th>幣別</th><th>支出</th><th>收入</th><th>道具</th></tr>
+        <tr>
+          <th>時間</th><th>行動</th><th>幣別</th><th>扣款</th><th>入帳</th><th>道具</th>
+        </tr>
       </thead>
-      <tbody id="t7Body"></tbody>
+      <tbody id="t7TxBody"></tbody>
     </table>`;
   root.append(wrap, list);
 
-  // ====== 邏輯：道具選擇時，自動帶入幣別/金額，並鎖定欄位 ======
-  function applyItemBinding(){
+  // ===== 行為邏輯 =====
+
+  // 依道具選擇 → 自動帶幣別/金額/方向、鎖定欄位
+  function syncByItem(){
     const name = f_item.value;
-    const isItem = !!name;
-    const row = getShopByName(name);
-
-    if (isItem && row){
-      // 顯示「購買」模式
-      f_currency.value = row.price_type;
-      f_currency.disabled = true;
-
-      const q = Math.max(1, Number(f_qty.value || 1));
-      f_amount.value = row.price * q;
-      f_amount.disabled = true;
-
-      f_dir.value = 'debit';
-      f_dir.disabled = true;
-
-      btn_buy.disabled   = false;
-      btn_addTx.disabled = true;
-    }else{
-      // 顯示「一般交易」模式
-      f_currency.disabled = false;
-      f_amount.disabled   = false;
-      f_dir.disabled      = false;
-
-      btn_buy.disabled   = true;
-      btn_addTx.disabled = false;
+    const hasItem = !!name;
+    f_qty.disabled   = !hasItem ? true : false;     // 沒選道具就把數量鎖 1（避免誤會）
+    if (!hasItem){
+      f_qty.value = 1;
+      f_curr.disabled = false;
+      f_dir.disabled  = false;
+      f_amount.disabled = false;
+      msg.textContent = '一般交易模式：請手動選幣別、方向與金額。';
+      return;
     }
+    const it = itemMap.get(name);
+    const qty = Math.max(1, Number(f_qty.value||1));
+    f_curr.value = it?.price_type || f_curr.value;
+    f_amount.value = (it?.price || 0) * qty;
+    f_dir.value = 'debit';
+
+    // 鎖定（避免與商品設定衝突）
+    f_curr.disabled = true;
+    f_dir.disabled  = true;
+    f_amount.disabled = true;
+
+    msg.textContent = `購買模式：${name}｜單價 ${it?.price}（${it?.price_type}），數量 ${qty}，總計 ${f_amount.value}`;
   }
-  f_item.addEventListener('change', applyItemBinding);
-  f_qty.addEventListener('input', applyItemBinding);
 
-  // ====== 事件：寫入「一般交易」（不含道具）======
-  btn_addTx.addEventListener('click', async ()=>{
-    btn_addTx.disabled = true; msg.textContent = '寫入中…';
-    try{
-      if (f_item.value) { msg.textContent = '你已選擇道具，請用「購買道具」按鈕。'; btn_addTx.disabled=false; return; }
+  // 切學生 → 讀餘額、交易
+  async function refreshWalletAndTx(){
+    const stu = f_student.value;
+    await Promise.all([loadWallet(stu), loadTx(stu)]);
+  }
 
-      const amt = Number(f_amount.value || 0);
-      if (!amt || amt <= 0){ msg.textContent='金額需 > 0'; btn_addTx.disabled=false; return; }
+  // 讀餘額
+  async function loadWallet(student){
+    const { data } = await adminClient
+      .from('student_wallet')
+      .select('normal_coin, xer_coin, service_points, updated_at')
+      .eq('student_name', student)
+      .maybeSingle();
+    const n = data?.normal_coin ?? 0;
+    const x = data?.xer_coin ?? 0;
+    const s = data?.service_points ?? 0;
+    walletBox.textContent = `餘額｜一般貨幣：${n}、謝爾夏：${x}、愛校點數：${s}（更新：${fmtTime(data?.updated_at)}）`;
+  }
 
-      const body = {
-        student_name: f_student.value,
-        action: (f_action.value || 'ADJUST'),
-        type: f_currency.value,           // enum（一般貨幣/謝爾夏貨幣/愛校點數）
-        debit:  (f_dir.value==='debit')  ? amt : 0,
-        credit: (f_dir.value==='credit') ? amt : 0,
-        item: null
-      };
-      const { error } = await adminClient.from('transaction_log').insert(body);
-      if (error) throw error;
-
-      msg.textContent = '已寫入交易。';
-      await Promise.all([refreshWallet(), loadTx()]);
-      f_amount.value = '';
-    }catch(e){
-      console.warn(e); msg.textContent = '失敗：' + (e.message || e);
-    }finally{
-      btn_addTx.disabled = false;
-    }
-  });
-
-  // ====== 事件：「購買道具」（呼叫 RPC，不直接碰錢包）======
-  btn_buy.addEventListener('click', async ()=>{
-    btn_buy.disabled = true; msg.textContent = '購買中…';
-    try{
-      const name = f_item.value;
-      if (!name){ msg.textContent='請先選擇道具。'; btn_buy.disabled=false; return; }
-      const qty = Math.max(1, Number(f_qty.value || 1));
-
-      const { data, error } = await adminClient.rpc('buy_shop_item', {
-        p_action: (f_action.value || 'BUY'),
-        p_item_name: name,
-        p_qty: qty,
-        p_student_name: f_student.value
-      });
-      if (error) throw error;
-
-      // 交易成功 → 更新畫面（庫存與餘額）
-      msg.textContent = '購買成功。';
-      // 更新本地商品快取的庫存
-      const found = getShopByName(name);
-      if (found) found.stock = (data && data[0] && data[0].stock_after) ?? found.stock;
-      // 重繪道具下拉顯示字
-      [...f_item.options].forEach(opt=>{
-        const r = getShopByName(opt.value);
-        if (r) opt.textContent = `${r.item_name}｜$${r.price}｜${r.price_type}｜庫存:${r.stock}`;
-      });
-
-      await Promise.all([refreshWallet(), loadTx()]);
-      // 清掉一般欄位
-      f_item.value = ''; f_qty.value = 1; applyItemBinding();
-    }catch(e){
-      console.warn(e); msg.textContent = '購買失敗：' + (e.message || e);
-    }finally{
-      btn_buy.disabled = false;
-    }
-  });
-
-  // ====== 載入交易列表 ======
-  async function loadTx(){
-    const only = document.getElementById('t7OnlyThis')?.checked;
-    let q = adminClient
+  // 讀最近交易（30 筆）
+  async function loadTx(student){
+    const { data, error } = await adminClient
       .from('transaction_log')
-      .select('id, student_name, action, type, debit, credit, item, created_at')
-      .order('id',{ascending:false})
-      .limit(100);
-
-    if (only) q = q.eq('student_name', f_student.value);
-
-    const { data, error } = await q;
-    const tb = document.getElementById('t7Body'); tb.innerHTML = '';
-    if (error){ tb.innerHTML = `<tr><td colspan="7" class="err">讀取失敗：${error.message}</td></tr>`; return; }
-
+      .select('id, action, type, debit, credit, item, created_at')
+      .eq('student_name', student)
+      .order('created_at',{descending:true})
+      .limit(30);
+    const tb = $('#t7TxBody'); tb.innerHTML='';
+    if (error){ tb.innerHTML = `<tr><td colspan=6 class="err">${error.message}</td></tr>`; return; }
     (data||[]).forEach(r=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${fmtTime(r.created_at)}</td>
-        <td>${r.student_name}</td>
-        <td>${r.action||''}</td>
-        <td>${r.type||''}</td>
+        <td>${r.action||'-'}</td>
+        <td>${r.type||'-'}</td>
         <td class="mono">${r.debit||0}</td>
         <td class="mono">${r.credit||0}</td>
-        <td>${r.item||''}</td>
-      `;
+        <td>${r.item||''}</td>`;
       tb.appendChild(tr);
     });
   }
-  document.getElementById('t7Reload').addEventListener('click', loadTx);
-  document.getElementById('t7OnlyThis').addEventListener('change', loadTx);
 
-  // 首次載入
-  applyItemBinding();
-  await Promise.all([refreshWallet(), loadTx()]);
+  // 重新載入商品（購買後更新庫存/標籤）
+  async function reloadItemsAndSelectKeep(){
+    const keep = f_item.value;
+    SHOP_ITEMS = await loadShopItems();
+    itemMap.clear(); (SHOP_ITEMS||[]).forEach(it=> itemMap.set(it.item_name, it));
+    // 重建下拉
+    f_item.innerHTML = '';
+    f_item.appendChild(el('option',{value:'', text:'（無道具：一般交易）'}));
+    (SHOP_ITEMS||[]).forEach(it=>{
+      const label = `${it.item_name}｜${it.price_type} ${it.price}（庫存 ${it.stock}）`;
+      const opt = el('option',{value:it.item_name, text:label});
+      if (it.item_name === keep) opt.selected = true;
+      f_item.appendChild(opt);
+    });
+    syncByItem();
+  }
+
+  // 送出交易
+  btnGo.addEventListener('click', async ()=>{
+    btnGo.disabled = true; msg.textContent = '處理中…';
+    try{
+      const student = f_student.value;
+      const action  = (f_action.value||'').trim();
+      const item    = f_item.value;
+      const qty     = Math.max(1, Number(f_qty.value||1));
+
+      if (!student){ throw new Error('請選擇學生'); }
+
+      // 有選道具 → 走購買流程（RPC）
+      if (item){
+        const it = itemMap.get(item);
+        if (!it) throw new Error('選到不存在的道具（請重整）');
+        const { data, error } = await adminClient.rpc('buy_shop_item', {
+          p_action: action || 'BUY',
+          p_item_name: item,
+          p_qty: qty,
+          p_student_name: student
+        });
+        if (error) throw error;
+
+        // data 可能是單列或多列（RETURNS TABLE）；這裡取第一列
+        const row = Array.isArray(data) ? data[0] : data;
+        msg.textContent = `購買成功：#${row?.tx_id}｜扣 ${row?.paid_total} ${row?.currency}｜剩餘庫存 ${row?.stock_after}`;
+        // 更新 UI
+        await Promise.all([reloadItemsAndSelectKeep(), refreshWalletAndTx()]);
+      }
+      // 無道具 → 一般交易
+      else{
+        const curr = f_curr.value;
+        const dir  = f_dir.value; // credit / debit
+        const amt  = Number(f_amount.value||0);
+        if (!curr) throw new Error('請選幣別');
+        if (!amt || amt <= 0) throw new Error('金額需為正整數');
+
+        const body = {
+          student_name: student,
+          action: action || 'MANUAL',
+          type: curr,
+          debit:  dir === 'debit'  ? amt : 0,
+          credit: dir === 'credit' ? amt : 0,
+          item: null
+        };
+        const { error } = await adminClient.from('transaction_log').insert(body);
+        if (error) throw error;
+
+        msg.textContent = `已新增一般交易：${dir==='debit'?'扣除':'增加'} ${amt}（${curr}）`;
+        // 重讀餘額與交易（你的 recompute 觸發器會自動算錢包）
+        await refreshWalletAndTx();
+      }
+    }catch(e){
+      console.error(e);
+      msg.textContent = '失敗：' + (e.message || e);
+    }finally{
+      btnGo.disabled = false;
+    }
+  });
+
+  // 綁定事件
+  f_item.addEventListener('change', syncByItem);
+  f_qty.addEventListener('input',  syncByItem);
+  f_student.addEventListener('change', refreshWalletAndTx);
+
+  // 初始
+  syncByItem();
+  refreshWalletAndTx();
 }
 
 
