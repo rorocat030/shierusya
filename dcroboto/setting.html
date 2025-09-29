@@ -1026,15 +1026,6 @@ async function renderTab7(root){
   );
   wrap.append(form, msg);
 
-  // ====== 錢包摘要 ======
-  const walletCard = el('div',{class:'card'});
-  const walletLine = el('div',{class:'row'});
-  const wN = el('span',{class:'chip', text:'一般貨幣：-'}); 
-  const wX = el('span',{class:'chip', text:'謝爾夏貨幣：-'}); 
-  const wS = el('span',{class:'chip', text:'愛校點數：-'}); 
-  walletLine.append(wN,wX,wS);
-  walletCard.append(el('div',{class:'row'},[el('strong',{text:'錢包餘額'}), el('span',{class:'chip',text:'student_wallet'})]), walletLine);
-  wrap.append(walletCard);
 
   // ====== 交易列表（最近 100 筆，可依學生過濾） ======
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
