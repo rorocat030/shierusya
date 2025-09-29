@@ -86,6 +86,9 @@
     .modal .close-x { position:absolute; right:12px; top:8px; cursor:pointer; color:#5a728f; }
     .delta.plus { color:#157f3b; font-weight:700; }
     .delta.minus { color:#b42318; font-weight:700; }
+    #info {
+  white-space: pre-line;
+}
   </style>
 </head>
 <body>
@@ -681,10 +684,10 @@ async function renderTab3(root){
     const w = Number(f_work.value||0),
           s = Number(f_spec.value||0),
           p = Number(f_svc.value||0);
-    info.textContent =
-      ` 一般打工：+${w} ${CUR.work}／h；`+
-      `<br> 特殊打工：+${s} ${CUR.special}／h；`+
-      `<br> 愛校服務：+${p} ${CUR.service}／次`;
+info.textContent =
+  `一般打工：+${w} ${CUR.work}／h；\n` +
+  `特殊打工：+${s} ${CUR.special}／h；\n` +
+  `愛校服務：+${p} ${CUR.service}／次`;
   }
   async function load(){
     // 讀整張表，嘗試配對到三組
