@@ -659,7 +659,9 @@ async function renderTab3(root){
   const help = el('div',{class:'help'});
   help.innerHTML = `
     <ul style="margin:8px 0 0 18px;">
-      <li>一般打工：每小時給 <b>一般貨幣</b>；特殊打工：每小時給 <b>謝爾夏貨幣</b>；愛校服務：每次給 <b>愛校點數</b>。</li>
+      <li>一般打工：每小時給 <b>一般貨幣</b>；</li>
+      <li>特殊打工：每小時給 <b>謝爾夏貨幣</b>；</li>
+      <li>愛校服務：每次給 <b>愛校點數</b>。</li>
       <li>後續「累積桶」會依「幣別＋當時倍率」分桶累加，切換倍率就切到相符的桶。</li>
     </ul>
   `;
@@ -673,18 +675,6 @@ async function renderTab3(root){
     service:'愛校點數'
   };
 
-  // 讀到的現有 kind（避免你 enum 寫法不同而 upsert 失敗）
-  const existingKind = { work:null, special:null, service:null };
-
-  function renderPreviewText(){
-    const w = Number(f_work.value||0),
-          s = Number(f_spec.value||0),
-          p = Number(f_svc.value||0);
-    info.textContent =
-      `一般打工：+${w} ${CUR.work}／h；`+
-      `特殊打工：+${s} ${CUR.special}／h；`+
-      `愛校服務：+${p} ${CUR.service}／次`;
-  }
 
   async function load(){
     // 讀整張表，嘗試配對到三組
