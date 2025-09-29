@@ -1153,22 +1153,6 @@ async function renderTab7(root){
     }
   });
 
-  // ====== 輔助：載入錢包餘額 ======
-  async function refreshWallet(){
-    const { data } = await adminClient
-      .from('student_wallet')
-      .select('normal_coin, xer_coin, service_points')
-      .eq('student_name', f_student.value)
-      .maybeSingle();
-
-    const n = data?.normal_coin ?? 0;
-    const x = data?.xer_coin ?? 0;
-    const s = data?.service_points ?? 0;
-    wN.textContent = `一般貨幣：${n}`;
-    wX.textContent = `謝爾夏貨幣：${x}`;
-    wS.textContent = `愛校點數：${s}`;
-  }
-
   // 學生切換 → 重新載入錢包與交易列表
   f_student.addEventListener('change', async ()=>{
     await Promise.all([refreshWallet(), loadTx()]);
