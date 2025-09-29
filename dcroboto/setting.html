@@ -629,89 +629,124 @@
     }
 
 // ------------------------
-// TAP3：倍率管理（earn_current_rate）
-// kind 僅三筆：work(一般打工/每小時)、special(特殊打工/每小時)、service(愛校服務/每次)
-// placeholder 會顯示「目前：<倍率>（<幣別>）」
+// TAP3：倍率管理（改用 earn_current_rate 表）
+// - 三列（以 kind 當 PK）：work / special / service
+// - rate：每小時/每次給多少；currency：該 kind 的幣別
 // ------------------------
-const RATE_KINDS = [
-  { kind: 'work',    label: '一般打工（每小時）', currency: '一般貨幣' },
-  { kind: 'special', label: '特殊打工（每小時）', currency: '謝爾夏貨幣' },
-  { kind: 'service', label: '愛校服務（每次）',   currency: '愛校點數' },
-];
-
 async function renderTab3(root){
+  // 若你的 kind enum 不是這三個值，請改成實際 enum 值
+  const KIND_WORK = 'work';
+  const KIND_SPEC = 'special';
+  const KIND_SVC  = 'service';
+
   const wrap = el('div',{class:'card'});
-  wrap.append(
-    el('div',{class:'row'},[
-      el('strong',{text:'倍率管理'}),
-      el('span',{class:'chip',text:'earn_current_rate（每種僅一筆）'})
-    ])
-  );
 
-  const grid = el('div',{class:'grid grid-3'});
-  const fields = new Map(); // kind -> input
-
-  RATE_KINDS.forEach(k => {
-    const box   = el('div',{class:'card'});
-    const title = el('div',{class:'muted', text:`${k.label} → ${k.currency}`});
-    const input = el('input',{
-      type:'number', min:0,
-      placeholder:'讀取目前倍率中…' // 先放暫時字樣，load() 後改成「目前：x（幣別）」
-    });
-    fields.set(k.kind, input);
-    box.append(title, input);
-    grid.append(box);
-  });
+  // 欄位
+  const f_work = el('input',{type:'number', placeholder:'一般打工｜每小時 → 一般貨幣（例：100）', min:0});
+  const f_spec = el('input',{type:'number', placeholder:'特殊打工｜每小時 → 謝爾夏貨幣（例：5）', min:0});
+  const f_svc  = el('input',{type:'number', placeholder:'愛校服務｜每次 → 愛校點數（例：1）', min:0});
 
   const save = el('button',{class:'btn'},[document.createTextNode('儲存倍率')]);
   const reload = el('button',{class:'btn secondary'},[document.createTextNode('重新載入')]);
   const info = el('span',{class:'muted'});
-  wrap.append(grid, el('div',{class:'row'},[save, reload, info]));
+
+  wrap.append(
+    el('div',{class:'row'},[
+      el('strong',{text:'倍率管理'}),
+      el('span',{class:'chip',text:'earn_current_rate'})
+    ])
+  );
+
+  const grid = el('div',{class:'grid grid-4'});
+  grid.append(f_work, f_spec, f_svc, save, reload);
+  wrap.append(grid);
+
+  const help = el('div',{class:'help'});
+  help.innerHTML = `
+    <ul style="margin:8px 0 0 18px; padding:0;">
+      <li><b>一般打工</b>（${KIND_WORK}）：每小時 → <b>一般貨幣</b></li>
+      <li><b>特殊打工</b>（${KIND_SPEC}）：每小時 → <b>謝爾夏貨幣</b></li>
+      <li><b>愛校服務</b>（${KIND_SVC}）：每次 → <b>愛校點數</b></li>
+      <li>之後的新「累積桶」會依「幣別 × 當時倍率」分桶累加；倍率更動後會自動開始累到新的桶。</li>
+    </ul>
+  `;
+  const preview = el('div',{class:'card', style:'margin-top:8px'});
+  const pvText = el('div',{class:'muted'});
+  preview.append(el('div',{text:'目前設定（預覽）'}), pvText);
+
+  wrap.append(help, preview, info);
   root.append(wrap);
 
+  function renderPreview(){
+    const w = Number(f_work.value || 0);
+    const s = Number(f_spec.value || 0);
+    const p = Number(f_svc.value || 0);
+    pvText.textContent = `一般打工：每小時 +${w} 一般貨幣；特殊打工：每小時 +${s} 謝爾夏貨幣；愛校服務：每次 +${p} 愛校點數`;
+  }
+
+  f_work.addEventListener('input', renderPreview);
+  f_spec.addEventListener('input', renderPreview);
+  f_svc.addEventListener('input', renderPreview);
+
+  // 讀取（把三筆 kind 填入欄位；若沒資料就顯示空白）
   async function load(){
     const { data, error } = await adminClient
       .from('earn_current_rate')
-      .select('*'); // kind, rate, currency, updated_at
-    if (error) { info.textContent = '讀取失敗：'+(error.message||''); return; }
+      .select('kind, rate, currency, updated_at');
 
-    const map = new Map((data||[]).map(r=>[r.kind, r]));
-    RATE_KINDS.forEach(k=>{
-      const got = map.get(k.kind);
-      const input = fields.get(k.kind);
+    if (error) { info.textContent = '讀取失敗：' + (error.message || ''); return; }
 
-      // 讓 placeholder 顯示目前倍率；輸入值留空，方便直接輸入新數字
-      const rateNow = (got && Number.isFinite(+got.rate)) ? Number(got.rate) : null;
-      input.value = ''; // 清空，讓 placeholder 出現
-      input.placeholder = rateNow!=null
-        ? `目前：${rateNow}（${k.currency}）`
-        : `目前：尚未設定（${k.currency}）`;
-    });
+    // 轉小寫來對應
+    const byKind = {};
+    (data || []).forEach(r => { byKind[String(r.kind).toLowerCase()] = r; });
 
-    const latest = (data||[]).reduce((m,r)=> Math.max(m, new Date(r.updated_at||0).getTime()), 0);
-    info.textContent = latest ? ('最後更新：'+fmtTime(latest)) : '尚未建立（請儲存一次）';
+    // 優先用 kind 對應；若 kind 不符，退而求其次用 currency 對應
+    const findByCurrency = (c) => (data || []).find(r => r.currency === c);
+
+    const rWork = byKind[KIND_WORK] || findByCurrency('一般貨幣');
+    const rSpec = byKind[KIND_SPEC] || findByCurrency('謝爾夏貨幣');
+    const rSvc  = byKind[KIND_SVC]  || findByCurrency('愛校點數');
+
+    f_work.value = rWork?.rate ?? '';
+    f_spec.value = rSpec?.rate ?? '';
+    f_svc.value  = rSvc?.rate  ?? '';
+
+    // 顯示最近一次更新時間（取最大）
+    const maxUpd = (data||[]).reduce((m,r)=> Math.max(m, r.updated_at ? new Date(r.updated_at).getTime() : 0), 0);
+    info.textContent = maxUpd ? ('最後更新：' + fmtTime(new Date(maxUpd))) : '尚未建立設定（請儲存一次）';
+
+    renderPreview();
   }
 
+  // 儲存（三筆 upsert，onConflict: kind）
   save.addEventListener('click', async ()=>{
     save.disabled = true;
-    const rows = RATE_KINDS.map(k => ({
-      kind: k.kind,
-      rate: Number(fields.get(k.kind).value || 0),
-      currency: k.currency
-    }));
+
+    const rows = [
+      { kind: KIND_WORK, rate: Number(f_work.value || 0), currency: '一般貨幣' },
+      { kind: KIND_SPEC, rate: Number(f_spec.value || 0), currency: '謝爾夏貨幣' },
+      { kind: KIND_SVC,  rate: Number(f_svc .value || 0), currency: '愛校點數' },
+    ];
+
     const { error } = await adminClient
       .from('earn_current_rate')
       .upsert(rows, { onConflict: 'kind' });
+
     save.disabled = false;
-    info.textContent = error
-      ? ('儲存失敗：'+(error.message||''))
-      : ('已儲存：'+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}));
-    if (!error) load();
+
+    if (error) {
+      info.textContent = '儲存失敗：' + (error.message || '');
+    } else {
+      info.textContent = '已儲存：' + new Date().toLocaleString('zh-TW',{ timeZone:'Asia/Taipei' });
+      renderPreview();
+    }
   });
 
   reload.addEventListener('click', load);
+
   load();
 }
+
 
 
     // ------------------------
