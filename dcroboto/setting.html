@@ -633,7 +633,7 @@
 // - 一般打工：每小時給的一般貨幣 work_wage_default
 // - 特殊打工：每小時給的謝爾夏貨幣 special_wage_default
 // - 愛校服務：每次給的點數 service_points_per_time
-// 備註：資料表 wage_config 僅用 config_id=1 那一列
+// 備註：資料表 earn_current_rate 僅用 config_id=1 那一列
 // ------------------------
 async function renderTab3(root){
   const wrap = el('div',{class:'card'});
@@ -650,7 +650,7 @@ async function renderTab3(root){
   wrap.append(
     el('div',{class:'row'},[
       el('strong',{text:'倍率管理'}),
-      el('span',{class:'chip',text:'wage_config（單筆：config_id=1）'})
+      el('span',{class:'chip',text:'earn_current_rate（單筆：config_id=1）'})
     ])
   );
 
@@ -677,7 +677,7 @@ async function renderTab3(root){
   // 載入
   async function load(){
     const { data, error } = await adminClient
-      .from('wage_config')
+      .from('earn_current_rate')
       .select('work_wage_default, special_wage_default, service_points_per_time, updated_at')
       .eq('config_id', 1)
       .maybeSingle();
@@ -715,7 +715,7 @@ async function renderTab3(root){
       service_points_per_time: Number(f_svc.value  || 0)
     };
     const { error } = await adminClient
-      .from('wage_config')
+      .from('earn_current_rate')
       .upsert(body, { onConflict:'config_id' });
 
     save.disabled = false;
