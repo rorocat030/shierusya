@@ -1144,11 +1144,6 @@ async function renderTab7(root){
     }
   });
 
-  // 學生切換 → 重新載入錢包與交易列表
-  f_student.addEventListener('change', async ()=>{
-    await Promise.all([refreshWallet(), loadTx()]);
-  });
-
   // ====== 載入交易列表 ======
   async function loadTx(){
     const only = document.getElementById('t7OnlyThis')?.checked;
