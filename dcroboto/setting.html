@@ -667,12 +667,8 @@ async function renderTab3(root){
       <li><b>一般打工</b>（${KIND_WORK}）：每小時 → <b>一般貨幣</b></li>
       <li><b>特殊打工</b>（${KIND_SPEC}）：每小時 → <b>謝爾夏貨幣</b></li>
       <li><b>愛校服務</b>（${KIND_SVC}）：每次 → <b>愛校點數</b></li>
-      <li>之後的新「累積桶」會依「幣別 × 當時倍率」分桶累加；倍率更動後會自動開始累到新的桶。</li>
     </ul>
   `;
-  const preview = el('div',{class:'card', style:'margin-top:8px'});
-  const pvText = el('div',{class:'muted'});
-  preview.append(el('div',{text:'目前設定（預覽）'}), pvText);
 
   wrap.append(help, preview, info);
   root.append(wrap);
