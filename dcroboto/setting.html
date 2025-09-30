@@ -508,145 +508,248 @@ const EARN_KIND = {
       loadT1();
     }
 
-    // ------------------------
-    // TAP2：地區表 CRUD（含 遊戲/特製 機制欄位）
-    // ------------------------
-    async function renderTab2(root){
-      const wrap = el('div', {class:'card'});
+   // ------------------------
+// TAP2：地區表 CRUD（支援多伺服器）
+//  - 先選伺服器（discord_servers），再只顯示/操作該伺服器的地區
+//  - 新增/編輯欄位含 dc_channel_id、dc_thread_id、webhook_url、daily_limit、機制欄位
+//  - 新增時會寫入 server_id（必填）
+// ------------------------
+async function renderTab2(root){
+  const wrap = el('div', {class:'card'});
 
-      // 新增區塊
-      const form = el('div', {class:'grid grid-4'});
-      const f_name = el('input', {type:'text', placeholder:'地區顯示名稱'});
-      const f_type = el('select'); AREA_TYPES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
-      const f_thread = el('input', {type:'text', placeholder:'Discord Thread ID（可空）'});
-      const f_hook = el('input', {type:'text', placeholder:'Webhook URL（可空）'});
-      const f_limit = el('input', {type:'number', placeholder:'每日上限（愛校用，可空）'});
+  // ===== 伺服器選擇列 =====
+  const srvBar = el('div', {class:'toolbar'});
+  const srvSel = document.createElement('select');
+  const srvReload = el('button', {class:'btn secondary small'}, [document.createTextNode('重載伺服器')]);
+  const srvInfo = el('span', {class:'muted'});
+  srvBar.append(el('strong',{text:'伺服器'}), srvSel, srvReload, srvInfo);
+  wrap.append(el('div',{class:'row'},[
+    el('strong',{text:'地區管理'}),
+    el('span',{class:'chip',text:'area（綁定伺服器）'})
+  ]));
+  wrap.append(srvBar);
 
-      // 機制欄位（遊戲/特製才用）
-      const f_mech_label = el('input', {type:'text', placeholder:'機制名稱（遊戲/特製才需要）'});
-      const f_mech_code  = el('input', {type:'text', placeholder:'機制代碼（遊戲/特製才需要）'});
-      const mechHint = el('div', {class:'help', text:'只有型別為「遊戲」或「特製」時才會使用這兩個欄位'});
-      const addBtn = el('button',{class:'btn'},[document.createTextNode('新增地區')]);
+  // ===== 新增區塊（受選定伺服器影響） =====
+  const form = el('div', {class:'grid grid-4'});
+  const f_name   = el('input', {type:'text', placeholder:'地區顯示名稱'});
+  const f_type   = el('select'); AREA_TYPES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
+  const f_chan   = el('input', {type:'text', placeholder:'Discord Channel ID（可空）'});
+  const f_thread = el('input', {type:'text', placeholder:'Discord Thread ID（可空）'});
+  const f_hook   = el('input', {type:'text', placeholder:'Webhook URL（可空）'});
+  const f_limit  = el('input', {type:'number', placeholder:'每日上限（愛校用，可空）'});
 
-      function toggleCreateMechanicFields(){
-        const on = isGameLike(f_type.value);
-        f_mech_label.style.display = on ? '' : 'none';
-        f_mech_code.style.display  = on ? '' : 'none';
-        mechHint.style.display     = on ? 'block' : 'none';
-      }
+  const f_mech_label = el('input', {type:'text', placeholder:'機制名稱（遊戲/特製才需要）'});
+  const f_mech_code  = el('input', {type:'text', placeholder:'機制代碼（遊戲/特製才需要）'});
+  const mechHint     = el('div', {class:'help', text:'只有型別為「遊戲」或「特製」時才會使用這兩個欄位'});
 
-      form.append(f_name, f_type, f_thread, f_hook, f_limit, f_mech_label, f_mech_code, addBtn);
-      wrap.append(el('div',{class:'row'},[el('strong',{text:'地區管理'}), el('span',{class:'chip',text:'area'})]));
-      wrap.append(form, mechHint);
+  const addBtn = el('button',{class:'btn'},[document.createTextNode('新增地區')]);
+  form.append(f_name, f_type, f_chan, f_thread, f_hook, f_limit, f_mech_label, f_mech_code, addBtn);
 
-      // 一覽表
-      const list = el('div', {class:'table-wrap', style:'margin-top:10px'});
-      list.innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>名稱</th><th>型別</th><th>Thread</th><th>Webhook</th><th>上限</th>
-              <th>機制名稱（遊戲/特製）</th><th>機制代碼（遊戲/特製）</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="areasBody"></tbody>
-        </table>`;
-      root.append(wrap, list);
+  // 一覽表
+  const list = el('div', {class:'table-wrap', style:'margin-top:10px'});
+  list.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>名稱</th><th>型別</th><th>Channel</th><th>Thread</th><th>Webhook</th><th>上限</th>
+          <th>機制名稱（遊戲/特製）</th><th>機制代碼（遊戲/特製）</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="areasBody"></tbody>
+    </table>`;
+  root.append(wrap, form, mechHint, list);
 
-      toggleCreateMechanicFields();
-      f_type.addEventListener('change', toggleCreateMechanicFields);
+  // ===== 內部狀態 =====
+  let CUR_SERVER = null;
+  let SERVERS = [];
 
-      addBtn.addEventListener('click', async () => {
-        addBtn.disabled = true;
-        const body = {
-          area_name: f_name.value.trim(),
-          area_type: f_type.value,
-          dc_thread_id: f_thread.value || null,
-          webhook_url: f_hook.value || null,
-          daily_limit: f_limit.value? Number(f_limit.value): null
-        };
-        if (isGameLike(f_type.value)) {
-          body.mechanic_label = (f_mech_label.value || null);
-          body.mechanic_code  = (f_mech_code.value  || null);
-        }
-        const { error } = await adminClient.from('area').insert(body);
-        addBtn.disabled = false;
-        if (!error){
-          f_name.value=''; f_thread.value=''; f_hook.value=''; f_limit.value='';
-          f_mech_label.value=''; f_mech_code.value='';
-          loadAreas();
-        }
-      });
+  // ===== 輔助：切換機制欄顯示 =====
+  function toggleCreateMechanicFields(){
+    const on = isGameLike(f_type.value);
+    f_mech_label.style.display = on ? '' : 'none';
+    f_mech_code.style.display  = on ? '' : 'none';
+    mechHint.style.display     = on ? 'block' : 'none';
+  }
+  f_type.addEventListener('change', toggleCreateMechanicFields);
+  toggleCreateMechanicFields();
 
-      async function loadAreas(){
-        const { data } = await adminClient.from('area').select('*').order('area_name',{ascending:true});
-        const tb = $('#areasBody'); tb.innerHTML='';
-        (data||[]).forEach(r=>tb.appendChild(areaRow(r)));
-      }
-
-      function areaRow(r){
-        const tr = document.createElement('tr');
-        const name = el('input',{type:'text', value:r.area_name});
-        const type = el('select'); AREA_TYPES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.area_type) o.selected=true; type.appendChild(o); });
-        const t = el('input',{type:'text', value:r.dc_thread_id||''});
-        const w = el('input',{type:'text', value:r.webhook_url||''});
-        const lim = el('input',{type:'number', value: r.daily_limit==null?'':r.daily_limit});
-
-        const mechLabel = el('input',{type:'text', value: r.mechanic_label || ''});
-        const mechCode  = el('input',{type:'text', value: r.mechanic_code  || ''});
-
-        const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
-        const del = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
-
-        const tdName = el('td',{},[name]);
-        const tdType = el('td',{},[type]);
-        const tdT = el('td',{},[t]);
-        const tdW = el('td',{},[w]);
-        const tdLim = el('td',{},[lim]);
-        const tdMechLabel = el('td',{},[mechLabel]);
-        const tdMechCode  = el('td',{},[mechCode]);
-        const tbtn = el('td'); tbtn.append(save,' ',del);
-
-        tr.append(tdName, tdType, tdT, tdW, tdLim, tdMechLabel, tdMechCode, tbtn);
-
-        const toggleRowMechanic = ()=>{
-          const on = isGameLike(type.value);
-          tdMechLabel.style.display = on ? '' : 'none';
-          tdMechCode.style.display  = on ? '' : 'none';
-        };
-        toggleRowMechanic();
-        type.addEventListener('change', toggleRowMechanic);
-
-        save.addEventListener('click', async ()=>{
-          save.disabled=true;
-          const body = {
-            area_name: name.value.trim(),
-            area_type: type.value,
-            dc_thread_id: t.value || null,
-            webhook_url: w.value || null,
-            daily_limit: lim.value ? Number(lim.value) : null,
-            mechanic_label: null,
-            mechanic_code: null
-          };
-          if (isGameLike(type.value)) {
-            body.mechanic_label = mechLabel.value || null;
-            body.mechanic_code  = mechCode.value  || null;
-          }
-          const { error } = await adminClient.from('area').update(body).eq('area_id', r.area_id);
-          save.disabled=false; if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
-        });
-
-        del.addEventListener('click', async ()=>{
-          if (!confirm('確定刪除？')) return;
-          const { error } = await adminClient.from('area').delete().eq('area_id', r.area_id);
-          if (!error) tr.remove();
-        });
-
-        return tr;
-      }
-
-      loadAreas();
+  // ===== 載入伺服器清單 =====
+  async function loadServers(){
+    const { data, error } = await adminClient
+      .from('discord_servers')
+      .select('server_id, server_name, is_active, updated_at')
+      .order('server_name', {ascending:true});
+    SERVERS = data || [];
+    // 建立下拉
+    srvSel.innerHTML = '';
+    if (!SERVERS.length){
+      const opt = document.createElement('option');
+      opt.value = ''; opt.textContent = '（尚無伺服器，先到 Discord /ping 註冊）';
+      srvSel.appendChild(opt);
+      CUR_SERVER = null;
+      srvInfo.textContent = '';
+      addBtn.disabled = true;
+      renderAreas([]);
+      return;
     }
+    SERVERS.forEach(s=>{
+      const opt = document.createElement('option');
+      opt.value = s.server_id;
+      opt.textContent = `${s.server_name} (${s.server_id})${s.is_active ? '' : ' [停用]'}`;
+      srvSel.appendChild(opt);
+    });
+    // 預設選第一個或保留之前選的
+    if (!CUR_SERVER || !SERVERS.find(s=>s.server_id===CUR_SERVER)){
+      CUR_SERVER = SERVERS[0].server_id;
+    }
+    srvSel.value = CUR_SERVER;
+    const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
+    srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
+    addBtn.disabled = !CUR_SERVER;
+    await loadAreas();
+  }
+
+  srvSel.addEventListener('change', async ()=>{
+    CUR_SERVER = srvSel.value || null;
+    const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
+    srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
+    addBtn.disabled = !CUR_SERVER;
+    await loadAreas();
+  });
+  srvReload.addEventListener('click', loadServers);
+
+  // ===== 新增地區（會寫入 server_id） =====
+  addBtn.addEventListener('click', async () => {
+    if (!CUR_SERVER){ alert('請先選擇伺服器'); return; }
+    addBtn.disabled = true;
+    const body = {
+      server_id:   CUR_SERVER,                 // ★ 必填：綁定伺服器
+      area_name:   f_name.value.trim(),
+      area_type:   f_type.value,
+      dc_channel_id: f_chan.value || null,
+      dc_thread_id:  f_thread.value || null,
+      webhook_url: f_hook.value || null,
+      daily_limit: f_limit.value? Number(f_limit.value): null,
+      mechanic_label: null,
+      mechanic_code:  null
+    };
+    if (isGameLike(f_type.value)) {
+      body.mechanic_label = (f_mech_label.value || null);
+      body.mechanic_code  = (f_mech_code.value  || null);
+    }
+    const { error } = await adminClient.from('area').insert(body);
+    addBtn.disabled = false;
+    if (error){
+      alert('新增失敗：' + (error.message||''));
+      return;
+    }
+    // 清空表單
+    f_name.value=''; f_chan.value=''; f_thread.value=''; f_hook.value=''; f_limit.value='';
+    f_mech_label.value=''; f_mech_code.value='';
+    await loadAreas();
+  });
+
+  // ===== 讀取 & 繪製地區（限定伺服器） =====
+  async function loadAreas(){
+    const tb = $('#areasBody'); tb.innerHTML='';
+    if (!CUR_SERVER) return;
+    const { data, error } = await adminClient
+      .from('area')
+      .select('*')
+      .eq('server_id', CUR_SERVER)               // ★ 只抓當前伺服器
+      .order('area_name',{ascending:true});
+    if (error){
+      tb.innerHTML = `<tr><td colspan=9 class="err">讀取失敗：${error.message}</td></tr>`;
+      return;
+    }
+    renderAreas(data || []);
+  }
+
+  function renderAreas(rows){
+    const tb = $('#areasBody'); tb.innerHTML='';
+    rows.forEach(r=>tb.appendChild(areaRow(r)));
+  }
+
+  function areaRow(r){
+    const tr = document.createElement('tr');
+
+    const name = el('input',{type:'text', value:r.area_name});
+    const type = el('select'); AREA_TYPES.forEach(v=>{ 
+      const o=el('option',{value:v,text:v}); 
+      if(v===r.area_type) o.selected=true; 
+      type.appendChild(o); 
+    });
+
+    const chan = el('input',{type:'text', value:r.dc_channel_id||''});
+    const thrd = el('input',{type:'text', value:r.dc_thread_id||''});
+    const hook = el('input',{type:'text', value:r.webhook_url||''});
+    const lim  = el('input',{type:'number', value: r.daily_limit==null?'':r.daily_limit});
+
+    const mechLabel = el('input',{type:'text', value: r.mechanic_label || ''});
+    const mechCode  = el('input',{type:'text', value: r.mechanic_code  || ''});
+
+    const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+    const del  = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+
+    // 行內顯示
+    const tdName = el('td',{},[name]);
+    const tdType = el('td',{},[type]);
+    const tdChan = el('td',{},[chan]);
+    const tdThrd = el('td',{},[thrd]);
+    const tdHook = el('td',{},[hook]);
+    const tdLim  = el('td',{},[lim]);
+    const tdMechLabel = el('td',{},[mechLabel]);
+    const tdMechCode  = el('td',{},[mechCode]);
+    const tbtn = el('td'); tbtn.append(save,' ',del);
+
+    tr.append(tdName, tdType, tdChan, tdThrd, tdHook, tdLim, tdMechLabel, tdMechCode, tbtn);
+
+    // 顯示切換（遊戲/特製才顯示機制）
+    function toggleRowMechanic(){
+      const on = isGameLike(type.value);
+      tdMechLabel.style.display = on ? '' : 'none';
+      tdMechCode.style.display  = on ? '' : 'none';
+    }
+    toggleRowMechanic();
+    type.addEventListener('change', toggleRowMechanic);
+
+    // 儲存
+    save.addEventListener('click', async ()=>{
+      save.disabled=true;
+      const body = {
+        area_name:   name.value.trim(),
+        area_type:   type.value,
+        dc_channel_id: chan.value || null,
+        dc_thread_id:  thrd.value || null,
+        webhook_url: hook.value || null,
+        daily_limit: lim.value ? Number(lim.value) : null,
+        mechanic_label: null,
+        mechanic_code:  null
+      };
+      if (isGameLike(type.value)) {
+        body.mechanic_label = mechLabel.value || null;
+        body.mechanic_code  = mechCode.value  || null;
+      }
+      // 注意：更新不改 server_id（固定屬於當前伺服器）
+      const { error } = await adminClient.from('area').update(body).eq('area_id', r.area_id);
+      save.disabled=false;
+      if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+    });
+
+    // 刪除
+    del.addEventListener('click', async ()=>{
+      if (!confirm('確定刪除？')) return;
+      const { error } = await adminClient.from('area').delete().eq('area_id', r.area_id);
+      if (!error) tr.remove();
+    });
+
+    return tr;
+  }
+
+  // 初始載入
+  await loadServers();
+}
+
 
 // ------------------------
 // TAP3：倍率管理（正確使用中文 enum 值）
