@@ -1030,7 +1030,7 @@ async function renderTab3(root){
 let SHOP_CACHE = [];
 const getShopByName = (name) => SHOP_CACHE.find(i => i.item_name === name) || null;
 
-// ===== TAP7：交易 / 商店 =====
+// ===== TAP7：交易 / 商店（含「金流」單欄顯示 + / -）=====
 async function renderTab7(root){
   // 先準備學生、商品
   await loadStudentNames();
@@ -1050,12 +1050,11 @@ async function renderTab7(root){
   // 學生
   const f_student = makeStudentSelect();
 
-  // 行動（寫進 transaction_log.action；購買預設會用 BUY，你也可改）
+  // 行動（寫進 transaction_log.action；購買預設會用 BUY）
   const f_action  = el('input',{type:'text', placeholder:'行動（例：活動獎勵 / BUY）'});
 
   // 道具（可空 = 一般交易）
   const f_item = el('select');
-  // option: 空 -> 一般交易
   f_item.appendChild(el('option',{value:'', text:'（無道具：一般交易）'}));
   (SHOP_ITEMS||[]).forEach(it=>{
     const label = `${it.item_name}｜${it.price_type} ${it.price}（庫存 ${it.stock}）`;
@@ -1086,13 +1085,13 @@ async function renderTab7(root){
   form.append(f_student, f_action, f_item, f_qty, f_curr, f_dir, f_amount, btnGo);
   wrap.append(form, walletBox, msg);
 
-  // ===== 交易列表 =====
+  // ===== 交易列表（表頭改成「金流」單欄） =====
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
     <table>
       <thead>
         <tr>
-          <th>時間</th><th>行動</th><th>幣別</th><th>扣款</th><th>入帳</th><th>道具</th>
+          <th>時間</th><th>行動</th><th>幣別</th><th>金流</th><th>道具</th>
         </tr>
       </thead>
       <tbody id="t7TxBody"></tbody>
@@ -1105,7 +1104,9 @@ async function renderTab7(root){
   function syncByItem(){
     const name = f_item.value;
     const hasItem = !!name;
-    f_qty.disabled   = !hasItem ? true : false;     // 沒選道具就把數量鎖 1（避免誤會）
+
+    // 沒選道具 → 數量無用，鎖為 1；其餘欄位開放手動
+    f_qty.disabled = !hasItem;
     if (!hasItem){
       f_qty.value = 1;
       f_curr.disabled = false;
@@ -1114,13 +1115,15 @@ async function renderTab7(root){
       msg.textContent = '一般交易模式：請手動選幣別、方向與金額。';
       return;
     }
+
+    // 選了道具 → 自動帶入：幣別 / 金額(= 單價 * 數量) / 方向(扣除)
     const it = itemMap.get(name);
     const qty = Math.max(1, Number(f_qty.value||1));
     f_curr.value = it?.price_type || f_curr.value;
     f_amount.value = (it?.price || 0) * qty;
     f_dir.value = 'debit';
 
-    // 鎖定（避免與商品設定衝突）
+    // 鎖定（避免與商品配置衝突）
     f_curr.disabled = true;
     f_dir.disabled  = true;
     f_amount.disabled = true;
@@ -1147,7 +1150,7 @@ async function renderTab7(root){
     walletBox.textContent = `餘額｜一般貨幣：${n}、謝爾夏：${x}、愛校點數：${s}（更新：${fmtTime(data?.updated_at)}）`;
   }
 
-  // 讀最近交易（30 筆）
+  // 讀最近交易（30 筆）→ 金流單欄（+ / -）
   async function loadTx(student){
     const { data, error } = await adminClient
       .from('transaction_log')
@@ -1156,16 +1159,30 @@ async function renderTab7(root){
       .order('created_at',{descending:true})
       .limit(30);
     const tb = $('#t7TxBody'); tb.innerHTML='';
-    if (error){ tb.innerHTML = `<tr><td colspan=6 class="err">${error.message}</td></tr>`; return; }
+
+    if (error){
+      tb.innerHTML = `<tr><td colspan=5 class="err">${error.message}</td></tr>`;
+      return;
+    }
+
     (data||[]).forEach(r=>{
       const tr = document.createElement('tr');
+
+      const debit  = Number(r.debit || 0);
+      const credit = Number(r.credit || 0);
+
+      // 金流顯示規則：以「淨額」為主（入帳-扣款）
+      const net  = credit - debit;
+      const sign = net >= 0 ? '+' : '-';
+      const cls  = net >= 0 ? 'plus' : 'minus';
+      const abs  = Math.abs(net);
+
       tr.innerHTML = `
         <td>${fmtTime(r.created_at)}</td>
-        <td>${r.action||'-'}</td>
-        <td>${r.type||'-'}</td>
-        <td class="mono">${r.debit||0}</td>
-        <td class="mono">${r.credit||0}</td>
-        <td>${r.item||''}</td>`;
+        <td>${r.action || '-'}</td>
+        <td>${r.type || '-'}</td>
+        <td class="mono"><span class="delta ${cls}">${sign}${abs}</span></td>
+        <td>${r.item || ''}</td>`;
       tb.appendChild(tr);
     });
   }
@@ -1202,6 +1219,7 @@ async function renderTab7(root){
       if (item){
         const it = itemMap.get(item);
         if (!it) throw new Error('選到不存在的道具（請重整）');
+
         const { data, error } = await adminClient.rpc('buy_shop_item', {
           p_action: action || 'BUY',
           p_item_name: item,
@@ -1210,10 +1228,8 @@ async function renderTab7(root){
         });
         if (error) throw error;
 
-        // data 可能是單列或多列（RETURNS TABLE）；這裡取第一列
         const row = Array.isArray(data) ? data[0] : data;
         msg.textContent = `購買成功：#${row?.tx_id}｜扣 ${row?.paid_total} ${row?.currency}｜剩餘庫存 ${row?.stock_after}`;
-        // 更新 UI
         await Promise.all([reloadItemsAndSelectKeep(), refreshWalletAndTx()]);
       }
       // 無道具 → 一般交易
@@ -1236,7 +1252,6 @@ async function renderTab7(root){
         if (error) throw error;
 
         msg.textContent = `已新增一般交易：${dir==='debit'?'扣除':'增加'} ${amt}（${curr}）`;
-        // 重讀餘額與交易（你的 recompute 觸發器會自動算錢包）
         await refreshWalletAndTx();
       }
     }catch(e){
@@ -1253,9 +1268,12 @@ async function renderTab7(root){
   f_student.addEventListener('change', refreshWalletAndTx);
 
   // 初始
+  // 無道具模式先鎖數量 = 1
+  f_qty.disabled = true;
   syncByItem();
   refreshWalletAndTx();
 }
+
 
 
     // ------------------------
