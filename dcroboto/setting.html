@@ -844,241 +844,237 @@ async function renderTab3(root){
 }
 
 
-  // ------------------------
-  // TAP4：販售道具（新增「圖片」彈窗，直接寫入 shop_items.img_url）
-  // ------------------------
-  async function renderTab4(root){
-    const wrap = el('div',{class:'card'});
-    wrap.append(el('div',{class:'row'},[
-      el('strong',{text:'販售道具'}),
-      el('span',{class:'chip',text:'shop_items'})
-    ]));
+// ------------------------
+// TAP4：販售道具（含：圖片彈窗、戰鬥用品勾選、分類篩選）
+// ------------------------
+async function renderTab4(root){
+  const wrap = el('div',{class:'card'});
+  wrap.append(el('div',{class:'row'},[
+    el('strong',{text:'販售道具'}),
+    el('span',{class:'chip',text:'shop_items'})
+  ]));
 
-    // === 新增商品（維持原本：不含圖片） ===
-    const f = el('div',{class:'grid grid-4'});
-    const f_name = el('input',{type:'text', placeholder:'道具名稱'});
-    const f_desc = el('input',{type:'text', placeholder:'商家/商品簡介'});
-    const f_type = el('select'); CURRENCIES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
-    const f_price = el('input',{type:'number', placeholder:'售價'});
-    const f_stock = el('input',{type:'number', placeholder:'庫存'});
-    const f_effect = el('input',{type:'text', placeholder:'效果文字（可空）'});
-    const f_code = el('input',{type:'text', placeholder:'effect_code（可空）'});
-    const f_uses = el('input',{type:'number', placeholder:'可用次數（空=永久）'});
-    const add = el('button',{class:'btn'},[document.createTextNode('新增')]);
-    f.append(f_name,f_desc,f_type,f_price,f_stock,f_effect,f_code,f_uses,add);
+  // === 新增商品（含戰鬥用品勾選） ===
+  const f = el('div',{class:'grid grid-4'});
+  const f_name  = el('input',{type:'text',  placeholder:'道具名稱'});
+  const f_desc  = el('input',{type:'text',  placeholder:'商家/商品簡介'});
+  const f_type  = el('select'); CURRENCIES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
+  const f_price = el('input',{type:'number',placeholder:'售價'});
+  const f_stock = el('input',{type:'number',placeholder:'庫存'});
+  const f_effect= el('input',{type:'text',  placeholder:'效果文字（可空）'});
+  const f_code  = el('input',{type:'text',  placeholder:'effect_code（可空）'});
+  const f_uses  = el('input',{type:'number',placeholder:'可用次數（空=永久）'});
+  // ★ 是否為戰鬥用品（新）
+  const f_battleWrap = el('label',{class:'field'});
+  const f_battle = el('input',{type:'checkbox'}); 
+  f_battleWrap.append(f_battle, document.createTextNode('  是否為戰鬥用品'));
 
-    const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
-    list.innerHTML = `
-      <table>
-        <thead>
-          <tr>
-            <th>名稱</th><th>簡介</th><th>幣別</th><th>售價</th><th>庫存</th>
-            <th>效果</th><th>程式碼</th><th>可用次數</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="shopBody"></tbody>
-      </table>`;
-    wrap.append(f, list);
-    root.append(wrap);
+  const add = el('button',{class:'btn'},[document.createTextNode('新增')]);
+  f.append(f_name,f_desc,f_type,f_price,f_stock,f_effect,f_code,f_uses,f_battleWrap,add);
 
-    add.addEventListener('click', async ()=>{
-      add.disabled=true;
-      const body={
-        item_name:f_name.value.trim(),
-        shop_desc:f_desc.value||null,
-        price_type:f_type.value,
-        price:Number(f_price.value||0),
-        stock:Number(f_stock.value||0),
-        item_effect:f_effect.value||null,
-        effect_code:f_code.value||null,
-        max_uses: f_uses.value? Number(f_uses.value): null
-        // ★ img_url 不在新增表單：新增完再用「圖片」按鈕設定
-      };
-      const { error } = await adminClient.from('shop_items').insert(body);
-      add.disabled=false;
-      if(!error){
-        f_name.value=f_desc.value=f_effect.value=f_code.value='';
-        f_price.value=f_stock.value=f_uses.value='';
-        load();
-      }
-    });
+  // === 工具列：分類篩選 ===
+  const tool = el('div',{class:'toolbar'});
+  const filterSel = document.createElement('select');
+  [['','（全部）'], ['一般貨幣','一般貨幣商品'], ['謝爾夏貨幣','謝爾夏幣商品'], ['愛校點數','愛校點數商品']]
+    .forEach(([val,lab])=> filterSel.appendChild(el('option',{value:val,text:lab})));
+  const reloadBtn = el('button',{class:'btn secondary small'},[document.createTextNode('重新載入')]);
+  const toolMsg = el('span',{class:'muted'});
+  tool.append(el('strong',{text:'篩選'}), filterSel, reloadBtn, toolMsg);
 
-    // ========= 圖片彈窗（動態建立一次，重複使用） =========
-    let IMG_MODAL = null; // { show, hide, input, preview, msg, save, ... }
-    function ensureImgModalDOM(){
-      if (IMG_MODAL) return IMG_MODAL;
+  // === 列表 ===
+  const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
+  list.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>名稱</th><th>簡介</th><th>幣別</th><th>售價</th><th>庫存</th>
+          <th>戰鬥</th><th>效果</th><th>程式碼</th><th>可用次數</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="shopBody"></tbody>
+    </table>`;
+  wrap.append(f, tool, list);
+  root.append(wrap);
 
-      const wrap = document.createElement('div');
-      wrap.innerHTML = `
-        <div id="imgUrlMask" class="modal-mask" aria-hidden="true" style="display:none;">
-          <div class="modal">
-            <div class="close-x" id="imgClose">✕</div>
-            <h3>商品圖片</h3>
-
-            <div class="field">
-              <label>圖片網址</label>
-              <input id="imgUrlInput" type="text" placeholder="https://…" />
-              <div class="help">貼上可直接存取的圖片網址，下方會即時預覽。留空並按「確定」可清除圖片。</div>
-            </div>
-
-            <div class="field">
-              <div style="border:1px solid #e6eef6;border-radius:8px;padding:8px;background:#f9fbff;text-align:center;">
-                <img id="imgPreview" alt="預覽" style="max-width:100%;max-height:260px;display:none;" />
-                <div id="imgPreviewEmpty" class="muted">（尚無圖片）</div>
-              </div>
-            </div>
-
-            <div class="row">
-              <span class="msg" id="imgMsg"></span>
-              <button class="btn secondary" id="imgCancel">取消</button>
-              <button class="btn" id="imgSave">確定</button>
+  // ========= 圖片彈窗（沿用、可重用） =========
+  let IMG_MODAL = null;
+  function ensureImgModalDOM(){
+    if (IMG_MODAL) return IMG_MODAL;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div id="imgUrlMask" class="modal-mask" aria-hidden="true" style="display:none;">
+        <div class="modal">
+          <div class="close-x" id="imgClose">✕</div>
+          <h3>商品圖片</h3>
+          <div class="field">
+            <label>圖片網址</label>
+            <input id="imgUrlInput" type="text" placeholder="https://…" />
+            <div class="help">貼上可直接存取的圖片網址，下方會即時預覽。留空按「確定」可清除圖片。</div>
+          </div>
+          <div class="field">
+            <div style="border:1px solid #e6eef6;border-radius:8px;padding:8px;background:#f9fbff;text-align:center;">
+              <img id="imgPreview" alt="預覽" style="max-width:100%;max-height:260px;display:none;" />
+              <div id="imgPreviewEmpty" class="muted">（尚無圖片）</div>
             </div>
           </div>
+          <div class="row">
+            <span class="msg" id="imgMsg"></span>
+            <button class="btn secondary" id="imgCancel">取消</button>
+            <button class="btn" id="imgSave">確定</button>
+          </div>
         </div>
-      `.trim();
-      document.body.appendChild(wrap.firstElementChild);
+      </div>
+    `.trim();
+    document.body.appendChild(wrap.firstElementChild);
 
-      const mask   = document.getElementById('imgUrlMask');
-      const input  = document.getElementById('imgUrlInput');
-      const pv     = document.getElementById('imgPreview');
-      const empty  = document.getElementById('imgPreviewEmpty');
-      const msg    = document.getElementById('imgMsg');
-      const save   = document.getElementById('imgSave');
-      const cancel = document.getElementById('imgCancel');
-      const closeX = document.getElementById('imgClose');
+    const mask   = document.getElementById('imgUrlMask');
+    const input  = document.getElementById('imgUrlInput');
+    const pv     = document.getElementById('imgPreview');
+    const empty  = document.getElementById('imgPreviewEmpty');
+    const msg    = document.getElementById('imgMsg');
+    const save   = document.getElementById('imgSave');
+    const cancel = document.getElementById('imgCancel');
+    const closeX = document.getElementById('imgClose');
 
-      function setPreview(url){
-        if (url){
-          pv.src = url;
-          pv.style.display = 'block';
-          empty.style.display = 'none';
-        }else{
-          pv.removeAttribute('src');
-          pv.style.display = 'none';
-          empty.style.display = 'block';
-        }
-      }
-      pv.onerror = () => {
-        msg.textContent = '圖片載入失敗，請確認此網址能直接顯示圖片。';
-        pv.style.display='none';
-        empty.style.display='block';
-      };
-
-      input.addEventListener('input', ()=>{ msg.textContent=''; setPreview(input.value.trim()); });
-
-      function show(){ mask.style.display = 'flex'; mask.setAttribute('aria-hidden','false'); setTimeout(()=>input.focus(),0); }
-      function hide(){ mask.style.display = 'none'; mask.setAttribute('aria-hidden','true'); msg.textContent=''; }
-
-      closeX.addEventListener('click', hide);
-      cancel.addEventListener('click', hide);
-
-      IMG_MODAL = { show, hide, input, setPreview, msg, save };
-      return IMG_MODAL;
+    function setPreview(url){
+      if (url){ pv.src=url; pv.style.display='block'; empty.style.display='none'; }
+      else { pv.removeAttribute('src'); pv.style.display='none'; empty.style.display='block'; }
     }
+    pv.onerror = () => { msg.textContent='圖片載入失敗，請確認網址。'; pv.style.display='none'; empty.style.display='block'; };
+    input.addEventListener('input', ()=>{ msg.textContent=''; setPreview(input.value.trim()); });
 
-    function openImgModalForRow(row){
-      const m = ensureImgModalDOM();
-      // 初始化值 + 預覽
-      m.input.value = row.img_url || '';
-      m.setPreview(m.input.value);
-      m.msg.textContent = '';
+    function show(){ mask.style.display='flex'; mask.setAttribute('aria-hidden','false'); setTimeout(()=>input.focus(),0); }
+    function hide(){ mask.style.display='none'; mask.setAttribute('aria-hidden','true'); msg.textContent=''; }
 
-      // 先移除舊的儲存事件（避免重複綁定）
-      if (m._saveHandler) m.save.removeEventListener('click', m._saveHandler);
+    closeX.addEventListener('click', hide);
+    cancel.addEventListener('click', hide);
 
-      m._saveHandler = async () => {
-        m.save.disabled = true;
-        m.msg.textContent = '儲存中…';
-        const url = (m.input.value || '').trim() || null;
-
-        const { error } = await adminClient
-          .from('shop_items')
-          .update({ img_url: url })
-          .eq('id', row.id);
-
-        m.save.disabled = false;
-        if (error){
-          m.msg.textContent = '儲存失敗：' + (error.message || '');
-          return;
-        }
-        // 更新本地資料，關閉彈窗
-        row.img_url = url;
-        m.hide();
-      };
-
-      m.save.addEventListener('click', m._saveHandler);
-      m.show();
-    }
-
-    // === 列表 ===
-    async function load(){
-      const { data } = await adminClient
-        .from('shop_items')
-        .select('*')
-        .order('item_name',{ascending:true});
-
-      const tb = $('#shopBody'); tb.innerHTML='';
-      (data||[]).forEach(r=>tb.appendChild(row(r)));
-    }
-
-    function row(r){
-      const tr = document.createElement('tr');
-      const name = el('input',{type:'text', value:r.item_name});
-      const desc = el('input',{type:'text', value:r.shop_desc||''});
-      const type = el('select'); CURRENCIES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.price_type) o.selected=true; type.appendChild(o);});
-      const price = el('input',{type:'number', value:r.price});
-      const stock = el('input',{type:'number', value:r.stock});
-      const eff = el('input',{type:'text', value:r.item_effect||''});
-      const code = el('input',{type:'text', value:r.effect_code||''});
-      const uses = el('input',{type:'number', value: r.max_uses==null?'':r.max_uses});
-
-      const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
-      const img  = el('button',{class:'btn secondary small'},[document.createTextNode('圖片')]); // ★ 新增圖片按鈕
-      const del  = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
-
-      tr.append(
-        el('td',{},[name]),
-        el('td',{},[desc]),
-        el('td',{},[type]),
-        el('td',{},[price]),
-        el('td',{},[stock]),
-        el('td',{},[eff]),
-        el('td',{},[code]),
-        el('td',{},[uses])
-      );
-      const tbtn = el('td'); tbtn.append(save,' ',img,' ',del); tr.appendChild(tbtn);
-
-      save.addEventListener('click', async()=>{
-        save.disabled=true;
-        const body={
-          item_name:name.value.trim(),
-          shop_desc:desc.value||null,
-          price_type:type.value,
-          price:Number(price.value||0),
-          stock:Number(stock.value||0),
-          item_effect:eff.value||null,
-          effect_code:code.value||null,
-          max_uses: uses.value? Number(uses.value): null
-          // img_url 不在這裡更新，由彈窗處理
-        };
-        const { error } = await adminClient.from('shop_items').update(body).eq('id', r.id);
-        save.disabled=false;
-        if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
-      });
-
-      img.addEventListener('click', ()=> openImgModalForRow(r));
-
-      del.addEventListener('click', async()=>{
-        if(!confirm('確定刪除？')) return;
-        const { error } = await adminClient.from('shop_items').delete().eq('id', r.id);
-        if(!error) tr.remove();
-      });
-
-      return tr;
-    }
-
-    load();
+    IMG_MODAL = { show, hide, input, setPreview, msg, save };
+    return IMG_MODAL;
   }
+  function openImgModalForRow(row){
+    const m = ensureImgModalDOM();
+    m.input.value = row.img_url || '';
+    m.setPreview(m.input.value);
+    m.msg.textContent = '';
+    if (m._saveHandler) m.save.removeEventListener('click', m._saveHandler);
+    m._saveHandler = async () => {
+      m.save.disabled = true; m.msg.textContent = '儲存中…';
+      const url = (m.input.value || '').trim() || null;
+      const { error } = await adminClient.from('shop_items').update({ img_url: url }).eq('id', row.id);
+      m.save.disabled = false;
+      if (error){ m.msg.textContent = '儲存失敗：' + (error.message||''); return; }
+      row.img_url = url; m.hide();
+    };
+    m.save.addEventListener('click', m._saveHandler);
+    m.show();
+  }
+
+  // === 新增 ===
+  add.addEventListener('click', async ()=>{
+    add.disabled=true;
+    const body={
+      item_name:  f_name.value.trim(),
+      shop_desc:  f_desc.value || null,
+      price_type: f_type.value,
+      price:      Number(f_price.value||0),
+      stock:      Number(f_stock.value||0),
+      item_effect:f_effect.value || null,
+      effect_code:f_code.value || null,
+      max_uses:   f_uses.value ? Number(f_uses.value) : null,
+      is_battle_item: !!f_battle.checked              // ★ 新增
+    };
+    const { error } = await adminClient.from('shop_items').insert(body);
+    add.disabled=false;
+    if(!error){
+      f_name.value=f_desc.value=f_effect.value=f_code.value='';
+      f_price.value=f_stock.value=f_uses.value='';
+      f_battle.checked=false;
+      load(); // 依當前篩選重載
+    } else {
+      toolMsg.textContent = '新增失敗：' + (error.message||'');
+    }
+  });
+
+  reloadBtn.addEventListener('click', ()=> load());
+  filterSel.addEventListener('change', ()=> load());
+
+  // === 載入 & 繪製（支援分類篩選） ===
+  async function load(){
+    const type = filterSel.value; // ''=全部 或 幣別
+    let q = adminClient.from('shop_items').select('*').order('item_name',{ascending:true});
+    if (type) q = q.eq('price_type', type);
+    const { data, error } = await q;
+    const tb = $('#shopBody'); tb.innerHTML='';
+    if (error){ tb.innerHTML = `<tr><td colspan=10 class="err">讀取失敗：${error.message}</td></tr>`; return; }
+    (data||[]).forEach(r=>tb.appendChild(row(r)));
+    toolMsg.textContent = type ? `只顯示：${type}` : '顯示全部';
+  }
+
+  function row(r){
+    const tr = document.createElement('tr');
+    const name  = el('input',{type:'text', value:r.item_name});
+    const desc  = el('input',{type:'text', value:r.shop_desc||''});
+    const type  = el('select'); CURRENCIES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.price_type) o.selected=true; type.appendChild(o);});
+    const price = el('input',{type:'number', value:r.price});
+    const stock = el('input',{type:'number', value:r.stock});
+    // ★ 戰鬥用品 勾選
+    const battle = el('input',{type:'checkbox'}); battle.checked = !!r.is_battle_item;
+
+    const eff   = el('input',{type:'text', value:r.item_effect||''});
+    const code  = el('input',{type:'text', value:r.effect_code||''});
+    const uses  = el('input',{type:'number', value: r.max_uses==null?'':r.max_uses});
+
+    const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+    const img  = el('button',{class:'btn secondary small'},[document.createTextNode('圖片')]);
+    const del  = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+
+    tr.append(
+      el('td',{},[name]),
+      el('td',{},[desc]),
+      el('td',{},[type]),
+      el('td',{},[price]),
+      el('td',{},[stock]),
+      el('td',{},[battle]),      // ★ 新欄
+      el('td',{},[eff]),
+      el('td',{},[code]),
+      el('td',{},[uses])
+    );
+    const tbtn = el('td'); tbtn.append(save,' ',img,' ',del); tr.appendChild(tbtn);
+
+    save.addEventListener('click', async()=>{
+      save.disabled=true;
+      const body={
+        item_name:   name.value.trim(),
+        shop_desc:   desc.value || null,
+        price_type:  type.value,
+        price:       Number(price.value||0),
+        stock:       Number(stock.value||0),
+        item_effect: eff.value || null,
+        effect_code: code.value || null,
+        max_uses:    uses.value ? Number(uses.value) : null,
+        is_battle_item: !!battle.checked          // ★ 儲存戰鬥用品
+      };
+      const { error } = await adminClient.from('shop_items').update(body).eq('id', r.id);
+      save.disabled=false;
+      if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+    });
+
+    img.addEventListener('click', ()=> openImgModalForRow(r));
+
+    del.addEventListener('click', async()=>{
+      if(!confirm('確定刪除？')) return;
+      const { error } = await adminClient.from('shop_items').delete().eq('id', r.id);
+      if(!error) tr.remove();
+    });
+
+    return tr;
+  }
+
+  // 初次載入
+  load();
+}
+
 
 
 
