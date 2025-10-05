@@ -845,7 +845,7 @@ async function renderTab3(root){
 
 
 // ------------------------
-// TAP4：販售道具（含：圖片彈窗、戰鬥用品勾選、分類篩選）
+// TAP4：販售道具（分類篩選、圖片彈窗、戰鬥欄位移到倒數第二、簡介/效果用 textarea）
 // ------------------------
 async function renderTab4(root){
   const wrap = el('div',{class:'card'});
@@ -854,7 +854,7 @@ async function renderTab4(root){
     el('span',{class:'chip',text:'shop_items'})
   ]));
 
-  // === 新增商品（含戰鬥用品勾選） ===
+  // === 新增商品（不含「戰鬥用品」；預設 is_battle_item=false） ===
   const f = el('div',{class:'grid grid-4'});
   const f_name  = el('input',{type:'text',  placeholder:'道具名稱'});
   const f_desc  = el('input',{type:'text',  placeholder:'商家/商品簡介'});
@@ -864,13 +864,8 @@ async function renderTab4(root){
   const f_effect= el('input',{type:'text',  placeholder:'效果文字（可空）'});
   const f_code  = el('input',{type:'text',  placeholder:'effect_code（可空）'});
   const f_uses  = el('input',{type:'number',placeholder:'可用次數（空=永久）'});
-  // ★ 是否為戰鬥用品（新）
-  const f_battleWrap = el('label',{class:'field'});
-  const f_battle = el('input',{type:'checkbox'}); 
-  f_battleWrap.append(f_battle, document.createTextNode('  是否為戰鬥用品'));
-
   const add = el('button',{class:'btn'},[document.createTextNode('新增')]);
-  f.append(f_name,f_desc,f_type,f_price,f_stock,f_effect,f_code,f_uses,f_battleWrap,add);
+  f.append(f_name,f_desc,f_type,f_price,f_stock,f_effect,f_code,f_uses,add);
 
   // === 工具列：分類篩選 ===
   const tool = el('div',{class:'toolbar'});
@@ -888,7 +883,7 @@ async function renderTab4(root){
       <thead>
         <tr>
           <th>名稱</th><th>簡介</th><th>幣別</th><th>售價</th><th>庫存</th>
-          <th>戰鬥</th><th>效果</th><th>程式碼</th><th>可用次數</th><th></th>
+          <th>效果</th><th>程式碼</th><th>可用次數</th><th>戰鬥</th><th></th>
         </tr>
       </thead>
       <tbody id="shopBody"></tbody>
@@ -982,14 +977,13 @@ async function renderTab4(root){
       item_effect:f_effect.value || null,
       effect_code:f_code.value || null,
       max_uses:   f_uses.value ? Number(f_uses.value) : null,
-      is_battle_item: !!f_battle.checked              // ★ 新增
+      // 不送 is_battle_item → 後端預設 false
     };
     const { error } = await adminClient.from('shop_items').insert(body);
     add.disabled=false;
     if(!error){
       f_name.value=f_desc.value=f_effect.value=f_code.value='';
       f_price.value=f_stock.value=f_uses.value='';
-      f_battle.checked=false;
       load(); // 依當前篩選重載
     } else {
       toolMsg.textContent = '新增失敗：' + (error.message||'');
@@ -1013,17 +1007,37 @@ async function renderTab4(root){
 
   function row(r){
     const tr = document.createElement('tr');
+
     const name  = el('input',{type:'text', value:r.item_name});
-    const desc  = el('input',{type:'text', value:r.shop_desc||''});
-    const type  = el('select'); CURRENCIES.forEach(v=>{ const o=el('option',{value:v,text:v}); if(v===r.price_type) o.selected=true; type.appendChild(o);});
+
+    // ★ 簡介 textarea（可放大）
+    const descArea = document.createElement('textarea');
+    descArea.value = r.shop_desc || '';
+    descArea.style.minHeight = '80px';
+    descArea.style.resize = 'vertical';
+
+    const type  = el('select'); 
+    CURRENCIES.forEach(v=>{ 
+      const o=el('option',{value:v,text:v}); 
+      if(v===r.price_type) o.selected=true; 
+      type.appendChild(o);
+    });
+
     const price = el('input',{type:'number', value:r.price});
     const stock = el('input',{type:'number', value:r.stock});
-    // ★ 戰鬥用品 勾選
-    const battle = el('input',{type:'checkbox'}); battle.checked = !!r.is_battle_item;
 
-    const eff   = el('input',{type:'text', value:r.item_effect||''});
+    // ★ 效果 textarea（可放大）
+    const effArea = document.createElement('textarea');
+    effArea.value = r.item_effect || '';
+    effArea.style.minHeight = '80px';
+    effArea.style.resize = 'vertical';
+
     const code  = el('input',{type:'text', value:r.effect_code||''});
     const uses  = el('input',{type:'number', value: r.max_uses==null?'':r.max_uses});
+
+    // ★ 戰鬥用品（移到操作前一格）
+    const battle = el('input',{type:'checkbox'}); 
+    battle.checked = !!r.is_battle_item;
 
     const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
     const img  = el('button',{class:'btn secondary small'},[document.createTextNode('圖片')]);
@@ -1031,14 +1045,14 @@ async function renderTab4(root){
 
     tr.append(
       el('td',{},[name]),
-      el('td',{},[desc]),
+      el('td',{},[descArea]),
       el('td',{},[type]),
       el('td',{},[price]),
       el('td',{},[stock]),
-      el('td',{},[battle]),      // ★ 新欄
-      el('td',{},[eff]),
+      el('td',{},[effArea]),
       el('td',{},[code]),
-      el('td',{},[uses])
+      el('td',{},[uses]),
+      el('td',{},[battle]) // 戰鬥用品放在按鈕前一格
     );
     const tbtn = el('td'); tbtn.append(save,' ',img,' ',del); tr.appendChild(tbtn);
 
@@ -1046,14 +1060,14 @@ async function renderTab4(root){
       save.disabled=true;
       const body={
         item_name:   name.value.trim(),
-        shop_desc:   desc.value || null,
+        shop_desc:   descArea.value || null,     // ★ textarea
         price_type:  type.value,
         price:       Number(price.value||0),
         stock:       Number(stock.value||0),
-        item_effect: eff.value || null,
+        item_effect: effArea.value || null,      // ★ textarea
         effect_code: code.value || null,
         max_uses:    uses.value ? Number(uses.value) : null,
-        is_battle_item: !!battle.checked          // ★ 儲存戰鬥用品
+        is_battle_item: !!battle.checked
       };
       const { error } = await adminClient.from('shop_items').update(body).eq('id', r.id);
       save.disabled=false;
@@ -1074,8 +1088,6 @@ async function renderTab4(root){
   // 初次載入
   load();
 }
-
-
 
 
     // ------------------------
