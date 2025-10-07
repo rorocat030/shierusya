@@ -857,7 +857,7 @@ async function renderTab4(root){
   // === 新增商品（不含「戰鬥用品」；預設 is_battle_item=false） ===
   const f = el('div',{class:'grid grid-4'});
   const f_name  = el('input',{type:'text',  placeholder:'道具名稱'});
-  const f_desc  = el('input',{type:'text',  placeholder:'商家/商品簡介'});
+  const f_desc  = el('input',{type:'text',  placeholder:'商家/商品簡介 請幫我-# 開頭 我懶得改程式碼> <'});
   const f_type  = el('select'); CURRENCIES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
   const f_price = el('input',{type:'number',placeholder:'售價'});
   const f_stock = el('input',{type:'number',placeholder:'庫存'});
