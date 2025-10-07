@@ -533,7 +533,7 @@ async function renderTab2(root){
   const form = el('div', {class:'grid grid-4'});
   const f_name   = el('input', {type:'text', placeholder:'地區顯示名稱'});
   const f_type   = el('select'); AREA_TYPES.forEach(v=>f_type.appendChild(el('option',{value:v,text:v})));
-  const f_chan   = el('input', {type:'text', placeholder:'Discord 頻道 ID（涵蓋所屬討論串 可空）'});
+  const f_chan   = el('input', {type:'text', placeholder:'Discord 頻道 ID（可空）'});
   const f_thread = el('input', {type:'text', placeholder:'Discord 討論串 ID（指定討論串互動 以此為主）'});
   const f_hook   = el('input', {type:'text', placeholder:'Webhook URL（可空）'});
   const f_limit  = el('input', {type:'number', placeholder:'每日上限（愛校用，可空）'});
