@@ -105,6 +105,7 @@
       <button class="tab-btn" data-tab="t2">地區表</button>
       <button class="tab-btn" data-tab="t3">時薪/點數設定</button>
       <button class="tab-btn" data-tab="t4">販售道具</button>
+      <button class="tab-btn" data-tab="t4gift">贈送道具</button>
       <button class="tab-btn" data-tab="t5">戰鬥攜帶物</button>
       <button class="tab-btn" data-tab="t6">教師文本</button>
       <!-- ✅ 新增 -->
@@ -374,6 +375,7 @@ const EARN_KIND = {
       if (key==='t2') return renderTab2(c);
       if (key==='t3') return renderTab3(c);
       if (key==='t4') return renderTab4(c);
+      if (key==='t4gift') return renderTab4Gift(c);
       if (key==='t5') return renderTab5(c);
       if (key==='t6') return renderTab6(c);
       if (key==='t7') return renderTab7(c); // ✅ 新增
@@ -1114,6 +1116,151 @@ async function renderTab4(root){
   load();
 }
 
+// ===== TAP：贈送道具（依幣別→選道具→選學生；數量可負=回收）=====
+async function renderTab4Gift(root){
+  await loadStudentNames(); // 用你既有的學生下拉
+
+  // 先把所有商品抓一次；之後用幣別篩選
+  let ALL_ITEMS = await loadShopItems(); // [{item_name, price_type, price, stock}...]
+
+  const wrap = el('div',{class:'card'});
+  wrap.append(el('div',{class:'row'},[
+    el('strong',{text:'贈送道具'}),
+    el('span',{class:'chip',text:'inventory & transaction_log'})
+  ]));
+
+  // 表單
+  const form = el('div',{class:'grid grid-4'});
+
+  // 1) 幣別分類
+  const f_curr = document.createElement('select');
+  f_curr.appendChild(el('option',{value:'', text:'（先選幣別）'}));
+  CURRENCIES.forEach(v=> f_curr.appendChild(el('option',{value:v, text:v})));
+
+  // 2) 道具（依幣別動態填入）
+  const f_item = document.createElement('select');
+  f_item.appendChild(el('option',{value:'', text:'（請先選幣別）'}));
+
+  // 3) 對象（學生）
+  const f_student = makeStudentSelect();
+
+  // 4) 數量（可負值=回收）
+  const f_qty = el('input',{type:'number', step:'1', placeholder:'數量（可負值=回收）'});
+  f_qty.value = 1;
+
+  // 顯示持有量
+  const ownedBox = el('div',{class:'help', text:'持有數量：-'});
+
+  // 送出
+  const btn = el('button',{class:'btn'},[document.createTextNode('確認')]);
+  const msg = el('span',{class:'muted'});
+
+  form.append(
+    el('div',{},[el('strong',{text:'幣別'}), f_curr]),
+    el('div',{},[el('strong',{text:'道具'}), f_item]),
+    el('div',{},[el('strong',{text:'對象'}), f_student]),
+    el('div',{},[el('strong',{text:'數量（可負）'}), f_qty]),
+    btn
+  );
+  wrap.append(form, ownedBox, msg);
+  root.append(wrap);
+
+  // 幫助函式：依幣別填入道具清單
+  function fillItemsByCurrency(){
+    const cat = f_curr.value;
+    f_item.innerHTML = '';
+    if (!cat){
+      f_item.appendChild(el('option',{value:'', text:'（請先選幣別）'}));
+      return;
+    }
+    f_item.appendChild(el('option',{value:'', text:'（選擇道具）'}));
+    ALL_ITEMS
+      .filter(i => i.price_type === cat)
+      .sort((a,b)=> a.item_name.localeCompare(b.item_name,'zh-Hant'))
+      .forEach(i => f_item.appendChild(el('option',{value:i.item_name, text:i.item_name})));
+  }
+
+  // 讀取學生持有量
+  async function refreshOwned(){
+    const student = f_student.value;
+    const item = f_item.value;
+    if (!student || !item){ ownedBox.textContent = '持有數量：-'; return; }
+    const { data, error } = await adminClient
+      .from('inventory')
+      .select('id, amount')
+      .eq('student_name', student)
+      .eq('item_name', item)
+      .maybeSingle();
+    const amt = data?.amount ?? 0;
+    ownedBox.textContent = `持有數量：${amt}`;
+  }
+
+  // 送出邏輯
+  btn.addEventListener('click', async ()=>{
+    btn.disabled = true; msg.textContent = '處理中…';
+    try{
+      const curr    = f_curr.value;
+      const item    = f_item.value;
+      const student = f_student.value;
+      const qty     = Number(f_qty.value || 0);
+
+      if (!curr)    throw new Error('請先選幣別');
+      if (!item)    throw new Error('請選擇道具');
+      if (!student) throw new Error('請選擇對象');
+      if (!Number.isFinite(qty) || qty === 0) throw new Error('數量不可為 0');
+
+      // 先查目前持有量
+      const { data: row, error: qErr } = await adminClient
+        .from('inventory')
+        .select('id, amount')
+        .eq('student_name', student)
+        .eq('item_name', item)
+        .maybeSingle();
+      if (qErr) throw qErr;
+
+      const curAmt = row?.amount ?? 0;
+      const newAmt = curAmt + qty;
+
+      // 不允許變成負數
+      if (newAmt < 0){
+        throw new Error(`持有不足，最多可回收 ${curAmt}。`);
+      }
+
+      // 寫入 inventory
+      if (row){ // 原本有
+        if (newAmt === 0){
+          const { error } = await adminClient
+            .from('inventory')
+            .delete()
+            .eq('id', row.id);
+          if (error) throw error;
+        }else{
+          const { error } = await adminClient
+            .from('inventory')
+            .update({ amount: newAmt })
+            .eq('id', row.id);
+          if (error) throw error;
+        }
+      }else{ // 原本沒有 → 只能是贈送（qty>0）
+        if (qty < 0) throw new Error('該角色尚未持有此道具，無法回收。');
+        const { error } = await adminClient
+          .from('inventory')
+          .insert({ student_name: student, item_name: item, amount: qty });
+        if (error) throw error;
+      }
+
+    
+  });
+
+  // 綁定事件
+  f_curr.addEventListener('change', ()=>{ fillItemsByCurrency(); refreshOwned(); });
+  f_item.addEventListener('change', refreshOwned);
+  f_student.addEventListener('change', refreshOwned);
+
+  // 初始
+  fillItemsByCurrency();
+  refreshOwned();
+}
 
    // ------------------------
 // TAP5：戰鬥攜帶物（學生名稱下拉 + 文案可伸縮）
