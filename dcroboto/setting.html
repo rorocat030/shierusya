@@ -508,11 +508,9 @@ const EARN_KIND = {
       loadT1();
     }
 
-   // ------------------------
-// TAP2：地區表 CRUD（支援多伺服器）
-//  - 先選伺服器（discord_servers），再只顯示/操作該伺服器的地區
-//  - 新增/編輯欄位含 dc_channel_id、dc_thread_id、webhook_url、daily_limit、機制欄位
-//  - 新增時會寫入 server_id（必填）
+
+// ------------------------
+// TAP2：地區表 CRUD（支援多伺服器 + 型別篩選）
 // ------------------------
 async function renderTab2(root){
   const wrap = el('div', {class:'card'});
@@ -528,6 +526,14 @@ async function renderTab2(root){
     el('span',{class:'chip',text:'area（綁定伺服器）'})
   ]));
   wrap.append(srvBar);
+
+  // ===== 型別篩選列（★ 新增） =====
+  const typeBar = el('div', {class:'toolbar'});
+  const typeFilter = document.createElement('select');
+  typeFilter.appendChild(el('option',{value:'', text:'（全部型別）'}));
+  AREA_TYPES.forEach(v => typeFilter.appendChild(el('option',{value:v, text:v})));
+  typeBar.append(el('strong',{text:'顯示型別'}), typeFilter);
+  wrap.append(typeBar);
 
   // ===== 新增區塊（受選定伺服器影響） =====
   const form = el('div', {class:'grid grid-4'});
@@ -562,6 +568,7 @@ async function renderTab2(root){
   // ===== 內部狀態 =====
   let CUR_SERVER = null;
   let SERVERS = [];
+  let CUR_FILTER = ''; // ★ 目前型別篩選（'' = 全部）
 
   // ===== 輔助：切換機制欄顯示 =====
   function toggleCreateMechanicFields(){
@@ -580,6 +587,7 @@ async function renderTab2(root){
       .select('server_id, server_name, is_active, updated_at')
       .order('server_name', {ascending:true});
     SERVERS = data || [];
+
     // 建立下拉
     srvSel.innerHTML = '';
     if (!SERVERS.length){
@@ -598,7 +606,6 @@ async function renderTab2(root){
       opt.textContent = `${s.server_name} (${s.server_id})${s.is_active ? '' : ' [停用]'}`;
       srvSel.appendChild(opt);
     });
-    // 預設選第一個或保留之前選的
     if (!CUR_SERVER || !SERVERS.find(s=>s.server_id===CUR_SERVER)){
       CUR_SERVER = SERVERS[0].server_id;
     }
@@ -606,6 +613,9 @@ async function renderTab2(root){
     const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
     srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
     addBtn.disabled = !CUR_SERVER;
+
+    // 維持現有型別篩選選項
+    typeFilter.value = CUR_FILTER || '';
     await loadAreas();
   }
 
@@ -614,16 +624,23 @@ async function renderTab2(root){
     const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
     srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
     addBtn.disabled = !CUR_SERVER;
+    await loadAreas(); // 會吃 CUR_FILTER
+  });
+
+  srvReload.addEventListener('click', loadServers);
+
+  // ★ 型別篩選切換 → 只顯示該型別
+  typeFilter.addEventListener('change', async ()=>{
+    CUR_FILTER = typeFilter.value || '';
     await loadAreas();
   });
-  srvReload.addEventListener('click', loadServers);
 
   // ===== 新增地區（會寫入 server_id） =====
   addBtn.addEventListener('click', async () => {
     if (!CUR_SERVER){ alert('請先選擇伺服器'); return; }
     addBtn.disabled = true;
     const body = {
-      server_id:   CUR_SERVER,                 // ★ 必填：綁定伺服器
+      server_id:   CUR_SERVER,
       area_name:   f_name.value.trim(),
       area_type:   f_type.value,
       dc_channel_id: f_chan.value || null,
@@ -640,24 +657,30 @@ async function renderTab2(root){
     const { error } = await adminClient.from('area').insert(body);
     addBtn.disabled = false;
     if (error){
-      alert('新增失敗：' + (error.message||''));
-      return;
+      alert('新增失敗：' + (error.message||'')); return;
     }
     // 清空表單
     f_name.value=''; f_chan.value=''; f_thread.value=''; f_hook.value=''; f_limit.value='';
     f_mech_label.value=''; f_mech_code.value='';
+    // ★ 重新載入並維持目前型別篩選
     await loadAreas();
   });
 
-  // ===== 讀取 & 繪製地區（限定伺服器） =====
+  // ===== 讀取 & 繪製地區（限定伺服器 + 型別篩選） =====
   async function loadAreas(){
     const tb = $('#areasBody'); tb.innerHTML='';
     if (!CUR_SERVER) return;
-    const { data, error } = await adminClient
+
+    let q = adminClient
       .from('area')
       .select('*')
-      .eq('server_id', CUR_SERVER)               // ★ 只抓當前伺服器
+      .eq('server_id', CUR_SERVER)
       .order('area_name',{ascending:true});
+
+    // ★ 套用型別篩選
+    if (CUR_FILTER) q = q.eq('area_type', CUR_FILTER);
+
+    const { data, error } = await q;
     if (error){
       tb.innerHTML = `<tr><td colspan=9 class="err">讀取失敗：${error.message}</td></tr>`;
       return;
@@ -691,7 +714,6 @@ async function renderTab2(root){
     const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
     const del  = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
 
-    // 行內顯示
     const tdName = el('td',{},[name]);
     const tdType = el('td',{},[type]);
     const tdChan = el('td',{},[chan]);
@@ -713,7 +735,7 @@ async function renderTab2(root){
     toggleRowMechanic();
     type.addEventListener('change', toggleRowMechanic);
 
-    // 儲存
+    // 儲存（★ 儲存後重新載入，維持篩選）
     save.addEventListener('click', async ()=>{
       save.disabled=true;
       const body = {
@@ -730,17 +752,19 @@ async function renderTab2(root){
         body.mechanic_label = mechLabel.value || null;
         body.mechanic_code  = mechCode.value  || null;
       }
-      // 注意：更新不改 server_id（固定屬於當前伺服器）
       const { error } = await adminClient.from('area').update(body).eq('area_id', r.area_id);
       save.disabled=false;
-      if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
+      if(!error){
+        // 若型別被改到不符合目前篩選，重新載入後該列會自動消失
+        await loadAreas();
+      }
     });
 
-    // 刪除
+    // 刪除（★ 刪除後重新載入，維持篩選）
     del.addEventListener('click', async ()=>{
       if (!confirm('確定刪除？')) return;
       const { error } = await adminClient.from('area').delete().eq('area_id', r.area_id);
-      if (!error) tr.remove();
+      if (!error) await loadAreas();
     });
 
     return tr;
@@ -749,6 +773,7 @@ async function renderTab2(root){
   // 初始載入
   await loadServers();
 }
+
 
 
 // ------------------------
