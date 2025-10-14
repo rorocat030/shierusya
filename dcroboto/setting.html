@@ -1227,67 +1227,77 @@ async function renderTab4Spshop(root){
     return;
   }
 
-    // 讀該分店已上架的商品（JOIN shop_items 拿幣別與單價）
-    const { data, error } = await adminClient
-      .from('special_shop_stock')
-      .select(`item_name, stock, updated_at, shop_items(price, price_type)`)
-      .eq('area_id', areaId)
-      .order('item_name',{ascending:true});
+  // 讀該分店已上架的商品（JOIN shop_items 拿幣別與單價）
+  const { data, error } = await adminClient
+    .from('special_shop_stock')
+    .select(`item_name, stock, updated_at, shop_items(price, price_type)`)
+    .eq('area_id', areaId)
+    .order('item_name',{ascending:true});
 
-    if (error){
-      tb.innerHTML = `<tr><td colspan="6" class="err">${error.message}</td></tr>`;
-      return;
-    }
-    if (!data || data.length===0){
-      tb.innerHTML = `<tr><td colspan="6" class="muted">這間分店尚未上架任何商品。</td></tr>`;
-      return;
-    }
-
-    (data||[]).forEach(r => {
-      const tr = document.createElement('tr');
-      const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? '-');
-      const price     = r.shop_items?.price ?? (itemByName.get(r.item_name)?.price ?? '-');
-
-      const stockInput = el('input',{type:'number', min:0, value:String(r.stock)});
-      stockInput.style.width = '110px';
-
-      const btnUpdate = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
-      const btnDel    = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
-
-      tr.innerHTML = `
-        <td>${r.item_name}</td>
-        <td>${priceType}</td>
-        <td class="mono">${price}</td>
-      `;
-      const tdStock = document.createElement('td'); tdStock.appendChild(stockInput);
-      const tdTime  = document.createElement('td'); tdTime.textContent = fmtTime(r.updated_at);
-      const tdBtn   = document.createElement('td'); tdBtn.append(btnUpdate, ' ', btnDel);
-      tr.appendChild(tdStock); tr.appendChild(tdTime); tr.appendChild(tdBtn);
-      tb.appendChild(tr);
-
-      btnUpdate.addEventListener('click', async ()=>{
-        btnUpdate.disabled=true;
-        const newStock = Math.max(0, Number(stockInput.value||0));
-        const { error } = await adminClient
-          .from('special_shop_stock')
-          .update({ stock: newStock })
-          .eq('area_id', areaId)
-          .eq('item_name', r.item_name);
-        btnUpdate.disabled=false;
-        if (!error){ btnUpdate.textContent='已儲存'; setTimeout(()=>btnUpdate.textContent='儲存', 900); loadAreaStockList(); }
-      });
-
-      btnDel.addEventListener('click', async ()=>{
-        if (!confirm(`刪除上架「${r.item_name}」？`)) return;
-        const { error } = await adminClient
-          .from('special_shop_stock')
-          .delete()
-          .eq('area_id', areaId)
-          .eq('item_name', r.item_name);
-        if (!error) tr.remove();
-      });
-    });
+  if (error){
+    tb.innerHTML = `<tr><td colspan="6" class="err">${error.message}</td></tr>`;
+    return;
   }
+
+  // ← 這裡新增幣別篩選（有選幣別就只顯示該幣別）
+  const cat = f_curr.value; // '' 代表不篩選
+  const rows = (data || []).filter(r => {
+    if (!cat) return true;
+    const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? null);
+    return priceType === cat;
+  });
+
+  if (!rows.length){
+    tb.innerHTML = `<tr><td colspan="6" class="muted">沒有符合的商品${cat ? `（已套用幣別：${cat}）` : ''}。</td></tr>`;
+    return;
+  }
+
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? '-');
+    const price     = r.shop_items?.price ?? (itemByName.get(r.item_name)?.price ?? '-');
+
+    const stockInput = el('input',{type:'number', min:0, value:String(r.stock)});
+    stockInput.style.width = '110px';
+
+    const btnUpdate = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+    const btnDel    = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+
+    tr.innerHTML = `
+      <td>${r.item_name}</td>
+      <td>${priceType}</td>
+      <td class="mono">${price}</td>
+    `;
+    const tdStock = document.createElement('td'); tdStock.appendChild(stockInput);
+    const tdTime  = document.createElement('td'); tdTime.textContent = fmtTime(r.updated_at);
+    const tdBtn   = document.createElement('td'); tdBtn.append(btnUpdate, ' ', btnDel);
+    tr.appendChild(tdStock); tr.appendChild(tdTime); tr.appendChild(tdBtn);
+    tb.appendChild(tr);
+
+    btnUpdate.addEventListener('click', async ()=>{
+      btnUpdate.disabled=true;
+      const newStock = Math.max(0, Number(stockInput.value||0));
+      const { error } = await adminClient
+        .from('special_shop_stock')
+        .update({ stock: newStock })
+        .eq('area_id', areaId)
+        .eq('item_name', r.item_name);
+      btnUpdate.disabled=false;
+      if (!error){ btnUpdate.textContent='已儲存'; setTimeout(()=>btnUpdate.textContent='儲存', 900); loadAreaStockList(); }
+    });
+
+    btnDel.addEventListener('click', async ()=>{
+      if (!confirm(`刪除上架「${r.item_name}」？`)) return;
+      const { error } = await adminClient
+        .from('special_shop_stock')
+        .delete()
+        .eq('area_id', areaId)
+        .eq('item_name', r.item_name);
+      if (!error) tr.remove();
+    });
+  });
+}
+
 
   // ---- 事件
 f_curr.addEventListener('change', ()=>{ 
