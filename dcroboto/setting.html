@@ -1219,12 +1219,13 @@ async function renderTab4Spshop(root){
   }
 
   async function loadAreaStockList(){
-    const tb = document.getElementById('spshopBody'); tb.innerHTML='';
-    const areaId = f_area.value;
-    if (!areaId){ 
-      tb.innerHTML = `<tr><td colspan="6" class="muted">請先選擇分店。</td></tr>`;
-      return;
-    }
+  const tb = document.getElementById('spshopBody'); 
+  tb.innerHTML='';
+  const areaId = f_area.value;
+  if (!areaId){ 
+    tb.innerHTML = `<tr><td colspan="6" class="muted">請先選擇分店。</td></tr>`;
+    return;
+  }
 
     // 讀該分店已上架的商品（JOIN shop_items 拿幣別與單價）
     const { data, error } = await adminClient
