@@ -1289,7 +1289,11 @@ async function renderTab4Spshop(root){
   }
 
   // ---- 事件
-  f_curr.addEventListener('change', ()=>{ fillItemsByCurrency(); f_stock.value=''; });
+f_curr.addEventListener('change', ()=>{ 
+  fillItemsByCurrency(); 
+  f_stock.value=''; 
+  loadAreaStockList();   // ← 幣別切換時也刷新下方列表
+});
   f_item.addEventListener('change', preloadStockForSelection);
   f_area.addEventListener('change', ()=>{ preloadStockForSelection(); loadAreaStockList(); });
 
