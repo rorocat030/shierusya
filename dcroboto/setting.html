@@ -1464,18 +1464,7 @@ async function renderTab4Gift(root){
         if (error) throw error;
       }
 
-      // 記錄到 transaction_log（給未來查紀錄）
-      const { error: txErr } = await adminClient
-        .from('transaction_log')
-        .insert({
-          student_name: student,
-          action: qty > 0 ? '贈送' : '回收',
-          type: curr,
-          debit: qty < 0 ? Math.abs(qty) : 0,
-          credit: qty > 0 ? qty : 0,
-          item: item
-        });
-      if (txErr) throw txErr;
+     
 
       msg.textContent = '已送出！';
       await refreshOwned(); // 重新查詢持有量
