@@ -2,3 +2,4 @@
 > 可自行新增資料夾 <br>
 > 資料夾名稱必須英文 <br>
 > 圖片名稱以英文數字為主
+> 圖片網址為 https://rorocat030.github.io/shierusya/
