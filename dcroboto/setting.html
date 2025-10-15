@@ -109,8 +109,9 @@
       <button class="tab-btn" data-tab="t4gift">贈送道具</button>
       <button class="tab-btn" data-tab="t5">戰鬥攜帶物</button>
       <button class="tab-btn" data-tab="t6">教師文本</button>
-      <!-- ✅ 新增 -->
       <button class="tab-btn" data-tab="t7">交易紀錄</button>
+      <button class="tab-btn" data-tab="t8">場景介紹</button>
+
     </div>
 
     <div id="content"></div>
@@ -380,7 +381,9 @@ const EARN_KIND = {
       if (key==='t4gift') return renderTab4Gift(c);
       if (key==='t5') return renderTab5(c);
       if (key==='t6') return renderTab6(c);
-      if (key==='t7') return renderTab7(c); // ✅ 新增
+      if (key==='t7') return renderTab7(c); 
+      if (key==='t8') return renderTab8(c);
+
     }
 
     // ------------------------
@@ -2006,6 +2009,296 @@ async function renderTab7(root){
   refreshWalletAndTx();
 }
 
+// ------------------------
+// TAP8：場景介紹（map_locations）
+// ------------------------
+async function renderTab8(root){
+  const wrap = el('div',{class:'card'});
+  wrap.append(el('div',{class:'row'},[
+    el('strong',{text:'場景介紹'}),
+    el('span',{class:'chip',text:'map_locations'})
+  ]));
+
+  // ===== 伺服器選擇 =====
+  const srvBar   = el('div',{class:'toolbar'});
+  const srvSel   = document.createElement('select');
+  const srvReload= el('button',{class:'btn secondary small'},[document.createTextNode('重載伺服器')]);
+  const srvInfo  = el('span',{class:'muted'});
+  srvBar.append(el('strong',{text:'伺服器'}), srvSel, srvReload, srvInfo);
+  wrap.append(srvBar);
+
+  // ===== 分類搜尋（即時） =====
+  const filterBar = el('div',{class:'toolbar'});
+  const qCat = el('input',{type:'text', placeholder:'搜尋地區分類（空白=全部）', style:'min-width:220px'});
+  filterBar.append(el('strong',{text:'分類搜尋'}), qCat);
+  wrap.append(filterBar);
+
+  // ===== 新增表單 =====
+  const form = el('div',{class:'grid grid-4'});
+  const f_cat    = el('input',{type:'text', placeholder:'地區分類'});
+  const f_name   = el('input',{type:'text', placeholder:'地區名稱'});
+  const f_chan   = el('input',{type:'text', placeholder:'頻道ID（可空）'});
+  const f_thread = el('input',{type:'text', placeholder:'討論串ID（可空）'});
+  const f_desc   = document.createElement('textarea');
+  f_desc.placeholder = '文本（可多行）'; f_desc.style.minHeight='80px'; f_desc.style.resize='vertical';
+  const btnAdd   = el('button',{class:'btn'},[document.createTextNode('新增')]);
+  form.append(f_cat, f_name, f_chan, f_thread, f_desc, btnAdd);
+  wrap.append(form);
+
+  // ===== 列表 =====
+  const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
+  list.innerHTML = `
+    <table>
+      <colgroup>
+        <col style="width: 20%;"><col style="width: 15%;"><col style="width: 15%;">
+        <col style="width: 15%;"><col style="width: 25%;"><col style="width: 10%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>地區分類</th><th>地區名稱</th><th>頻道ID</th><th>討論串ID</th><th>文本</th><th>圖片連結</th>
+        </tr>
+      </thead>
+      <tbody id="mapBody"></tbody>
+    </table>`;
+  root.append(wrap, list);
+
+  // ========= 圖片彈窗（本分頁用） =========
+  let IMG_MODAL = null;
+  function ensureImgModalForMap(){
+    if (IMG_MODAL) return IMG_MODAL;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div id="mapImgMask" class="modal-mask" aria-hidden="true" style="display:none;">
+        <div class="modal">
+          <div class="close-x" id="mapImgClose">✕</div>
+          <h3>場景圖片</h3>
+          <div class="field">
+            <label>圖片網址</label>
+            <input id="mapImgInput" type="text" placeholder="https://…" />
+            <div class="help">貼上可直接存取的圖片網址，下方會即時預覽。留空按「確定」可清除圖片。</div>
+          </div>
+          <div class="field">
+            <div style="border:1px solid #e6eef6;border-radius:8px;padding:8px;background:#f9fbff;text-align:center;">
+              <img id="mapImgPreview" alt="預覽" style="max-width:100%;max-height:260px;display:none;" />
+              <div id="mapImgEmpty" class="muted">（尚無圖片）</div>
+            </div>
+          </div>
+          <div class="row">
+            <span class="msg" id="mapImgMsg"></span>
+            <button class="btn secondary" id="mapImgCancel">取消</button>
+            <button class="btn" id="mapImgSave">確定</button>
+          </div>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(wrap.firstElementChild);
+
+    const mask   = document.getElementById('mapImgMask');
+    const input  = document.getElementById('mapImgInput');
+    const pv     = document.getElementById('mapImgPreview');
+    const empty  = document.getElementById('mapImgEmpty');
+    const msg    = document.getElementById('mapImgMsg');
+    const save   = document.getElementById('mapImgSave');
+    const cancel = document.getElementById('mapImgCancel');
+    const closeX = document.getElementById('mapImgClose');
+
+    function setPreview(url){
+      if (url){ pv.src=url; pv.style.display='block'; empty.style.display='none'; }
+      else { pv.removeAttribute('src'); pv.style.display='none'; empty.style.display='block'; }
+    }
+    pv.onerror = () => { msg.textContent='圖片載入失敗，請確認網址。'; pv.style.display='none'; empty.style.display='block'; };
+    input.addEventListener('input', ()=>{ msg.textContent=''; setPreview(input.value.trim()); });
+
+    function show(){ mask.style.display='flex'; mask.setAttribute('aria-hidden','false'); setTimeout(()=>input.focus(),0); }
+    function hide(){ mask.style.display='none'; mask.setAttribute('aria-hidden','true'); msg.textContent=''; }
+
+    closeX.addEventListener('click', hide);
+    cancel.addEventListener('click', hide);
+
+    IMG_MODAL = { show, hide, input, setPreview, msg, save };
+    return IMG_MODAL;
+  }
+  function openImgModalForMapRow(row, onSaved){
+    const m = ensureImgModalForMap();
+    m.input.value = row.image_url || '';
+    m.setPreview(m.input.value);
+    m.msg.textContent = '';
+    if (m._saveHandler) m.save.removeEventListener('click', m._saveHandler);
+    m._saveHandler = async () => {
+      m.save.disabled = true; m.msg.textContent = '儲存中…';
+      const url = (m.input.value || '').trim() || null;
+      const { error } = await adminClient.from('map_locations').update({ image_url: url }).eq('id', row.id);
+      m.save.disabled = false;
+      if (error){ m.msg.textContent = '儲存失敗：' + (error.message||''); return; }
+      row.image_url = url; m.hide(); if (onSaved) onSaved(url);
+    };
+    m.save.addEventListener('click', m._saveHandler);
+    m.show();
+  }
+
+  // ===== 狀態 =====
+  let CUR_SERVER = null;
+  let SERVERS = [];
+  let ALL_ROWS = [];   // 目前伺服器所有 rows
+  let CUR_Q = '';     // 分類搜尋字串
+
+  // ===== 讀伺服器 =====
+  async function loadServers(){
+    const { data, error } = await adminClient
+      .from('discord_servers')
+      .select('server_id, server_name, is_active')
+      .order('server_name',{ascending:true});
+    SERVERS = data || [];
+    srvSel.innerHTML = '';
+    if (!SERVERS.length){
+      srvSel.appendChild(el('option',{value:'',text:'（尚無伺服器，先到 Discord /ping 註冊）'}));
+      CUR_SERVER = null; srvInfo.textContent=''; btnAdd.disabled=true;
+      renderRows([]); return;
+    }
+    SERVERS.forEach(s=>{
+      const o = el('option',{value:s.server_id, text:`${s.server_name} (${s.server_id})${s.is_active?'':' [停用]'}`});
+      srvSel.appendChild(o);
+    });
+    if (!CUR_SERVER || !SERVERS.find(s=>s.server_id===CUR_SERVER)){
+      CUR_SERVER = SERVERS[0].server_id;
+    }
+    srvSel.value = CUR_SERVER;
+    const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
+    srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
+    btnAdd.disabled = !CUR_SERVER;
+    await loadRows();
+  }
+
+  srvSel.addEventListener('change', async ()=>{
+    CUR_SERVER = srvSel.value || null;
+    const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
+    srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
+    btnAdd.disabled = !CUR_SERVER;
+    await loadRows();
+  });
+  srvReload.addEventListener('click', loadServers);
+
+  // ===== 新增 =====
+  btnAdd.addEventListener('click', async ()=>{
+    if (!CUR_SERVER){ alert('請先選擇伺服器'); return; }
+    btnAdd.disabled = true;
+    const body = {
+      server_id: CUR_SERVER,
+      category:  f_cat.value.trim() || null,
+      area_name: f_name.value.trim(),
+      dc_channel_id: f_chan.value || null,
+      dc_thread_id:  f_thread.value || null,
+      description:   f_desc.value || null
+    };
+    const { error } = await adminClient.from('map_locations').insert(body);
+    btnAdd.disabled = false;
+    if (error){ alert('新增失敗：' + (error.message||'')); return; }
+    // 清空
+    f_cat.value=''; f_name.value=''; f_chan.value=''; f_thread.value=''; f_desc.value='';
+    await loadRows(); // 維持目前搜尋 CUR_Q
+  });
+
+  // ===== 讀取 rows（依伺服器）並套用分類搜尋 =====
+  async function loadRows(){
+    const { data, error } = await adminClient
+      .from('map_locations')
+      .select('*')
+      .eq('server_id', CUR_SERVER)
+      .order('category',{ascending:true})
+      .order('area_name',{ascending:true});
+    if (error){ renderRows([]); return; }
+    ALL_ROWS = data || [];
+    applyFilter();
+  }
+  function applyFilter(){
+    const tb = document.getElementById('mapBody'); tb.innerHTML='';
+    const kw = (CUR_Q||'').toLowerCase().trim();
+    const rows = !kw ? ALL_ROWS : ALL_ROWS.filter(r => (r.category||'').toLowerCase().includes(kw));
+    renderRows(rows);
+  }
+  qCat.addEventListener('input', ()=>{ CUR_Q = qCat.value; applyFilter(); });
+
+  // ===== 繪製 =====
+  function renderRows(rows){
+    const tb = document.getElementById('mapBody'); tb.innerHTML='';
+    if (!rows.length){
+      tb.innerHTML = `<tr><td colspan="6" class="muted">沒有資料${CUR_Q ? `（分類包含：${CUR_Q}）` : ''}。</td></tr>`;
+      return;
+    }
+    rows.forEach(r => tb.appendChild(row(r)));
+  }
+
+  function row(r){
+    const tr = document.createElement('tr');
+
+    const cat  = el('input',{type:'text', value:r.category||''});
+    const name = el('input',{type:'text', value:r.area_name||''});
+    const chan = el('input',{type:'text', value:r.dc_channel_id||''});
+    const thrd = el('input',{type:'text', value:r.dc_thread_id||''});
+
+    const desc = document.createElement('textarea');
+    desc.value = r.description || '';
+    desc.style.minHeight = '80px';
+    desc.style.resize = 'vertical';
+
+    const imgWrap = document.createElement('div');
+    const img = document.createElement('img');
+    img.style.maxWidth='100%'; img.style.maxHeight='56px'; img.style.display = r.image_url ? 'block':'none';
+    if (r.image_url) img.src = r.image_url;
+
+    const btnImg  = el('button',{class:'btn small secondary', style:'margin-top:6px;'},[document.createTextNode('修改圖片')]);
+    const btnSave = el('button',{class:'btn small', style:'margin-left:6px;'},[document.createTextNode('儲存')]);
+    const btnDel  = el('button',{class:'btn small secondary', style:'margin-left:6px;'},[document.createTextNode('刪除')]);
+
+    imgWrap.append(img, btnImg, document.createElement('br'), btnSave, document.createTextNode(' '), btnDel);
+
+    // 6 欄位
+    const td1 = document.createElement('td'); td1.appendChild(cat);
+    const td2 = document.createElement('td'); td2.appendChild(name);
+    const td3 = document.createElement('td'); td3.appendChild(chan);
+    const td4 = document.createElement('td'); td4.appendChild(thrd);
+    const td5 = document.createElement('td'); td5.appendChild(desc);
+    const td6 = document.createElement('td'); td6.appendChild(imgWrap);
+
+    tr.append(td1,td2,td3,td4,td5,td6);
+
+    // 行為：修改圖片 → 彈窗
+    btnImg.addEventListener('click', ()=>{
+      openImgModalForMapRow(r, (url)=>{
+        if (url){ img.src = url; img.style.display='block'; }
+        else { img.removeAttribute('src'); img.style.display='none'; }
+      });
+    });
+
+    // 行為：儲存（保持分類濾鏡不變）
+    btnSave.addEventListener('click', async ()=>{
+      btnSave.disabled = true;
+      const body = {
+        category:  cat.value.trim() || null,
+        area_name: name.value.trim() || null,
+        dc_channel_id: chan.value || null,
+        dc_thread_id:  thrd.value || null,
+        description:   desc.value || null
+      };
+      const { error } = await adminClient.from('map_locations').update(body).eq('id', r.id);
+      btnSave.disabled = false;
+      if (!error){ await loadRows(); } // 會自動 applyFilter()，維持 CUR_Q
+    });
+
+    // 行為：刪除
+    btnDel.addEventListener('click', async ()=>{
+      if (!confirm('確定刪除這筆場景介紹？')) return;
+      const { error } = await adminClient.from('map_locations').delete().eq('id', r.id);
+      if (!error){ tr.remove(); }
+    });
+
+    return tr;
+  }
+
+  // 初始
+  await loadServers();
+}
+    
 
 
     // ------------------------
