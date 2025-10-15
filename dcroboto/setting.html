@@ -2204,7 +2204,7 @@ async function renderTab8(root){
           </div>
           <div class="field" style="text-align:center;">
             <img id="mapImgPreview" alt="預覽" style="max-width:100%; max-height:260px; display:none;"/>
-            <div id="mapImgEmpty" class="muted">（尚無圖片）</div>
+            <div id="mapImgEmpty" class="muted">（無圖）</div>
           </div>
           <div class="row">
             <span class="msg" id="mapImgMsg"></span>
@@ -2422,7 +2422,7 @@ async function renderTab8(root){
     img.style.maxHeight='76px';
     img.style.display = r.image_url ? 'block' : 'none';
     if (r.image_url) img.src = r.image_url;
-    const noImg = el('div',{class:'muted', text:'（尚無圖片）'});
+    const noImg = el('div',{class:'muted', text:'（無圖）'});
     noImg.style.display = r.image_url ? 'none' : 'block';
     const btnImg = el('button',{class:'btn secondary small', style:'margin-top:6px;'},[document.createTextNode('圖片')]);
     imgBox.append(img, noImg, btnImg);
