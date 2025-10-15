@@ -428,8 +428,17 @@ const EARN_KIND = {
       const leftTableWrap = el('div', {class:'table-wrap'});
       const leftTable = el('table');
       leftTable.innerHTML = `
+      <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+    </colgroup>
         <thead><tr>
-          <th>student_id</th><th>student_name</th><th>player_id</th><th>更新時間</th>
+          <th>student_id</th>
+          <th>student_name</th>
+          <th>player_id</th>
+          <th>更新時間</th>
         </tr></thead><tbody id="t1-students"></tbody>`;
       leftTableWrap.append(leftTable); left.append(leftTableWrap);
 
@@ -442,8 +451,18 @@ const EARN_KIND = {
       const rightTableWrap = el('div', {class:'table-wrap'});
       const rightTable = el('table');
       rightTable.innerHTML = `
+      <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+    </colgroup>
         <thead><tr>
-          <th>player_id</th><th>玩家名稱</th><th>DCID</th><th>管理員</th><th></th>
+          <th>player_id</th>
+          <th>玩家名稱</th>
+          <th>DCID</th>
+          <th>管理員</th>
+          <th></th>
         </tr></thead><tbody id="t1-players"></tbody>`;
       rightTableWrap.append(rightTable); right.append(rightBar, rightTableWrap);
 
@@ -588,11 +607,29 @@ async function renderTab2(root){
   // 一覽表
   const list = el('div', {class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
+      <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 25%;">
+      <col style="width: 8%;">
+      <col style="width: 15%;">
+      <col style="width: 25%;">
+      <col style="width: 8%;">
+    </colgroup>
     <table>
       <thead>
         <tr>
-          <th>名稱</th><th>型別</th><th>頻道ID</th><th>討論串ID</th><th>Webhook</th><th>上限(愛校服務)</th>
-          <th>機制名稱（遊戲/特製）</th><th>機制代碼（遊戲/特製）</th><th></th>
+          <th>名稱</th>
+          <th>型別</th>
+          <th>頻道ID</th>
+          <th>討論串ID</th>
+          <th>Webhook</th>
+          <th>上限(愛校服務)</th>
+          <th>機制名稱（遊戲/特製）</th>
+          <th>機制代碼（遊戲/特製）</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="areasBody"></tbody>
@@ -1207,10 +1244,23 @@ async function renderTab4Spshop(root){
   // ---- 列表：只顯示目前分店的上架商品
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
+      <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 25%;">
+      <col style="width: 8%;">
+    </colgroup>
     <table>
       <thead>
         <tr>
-          <th>商品名稱</th><th>幣別</th><th>單價</th><th>店內庫存</th><th>更新時間</th><th></th>
+          <th>商品名稱</th>
+          <th>幣別</th>
+          <th>單價</th>
+          <th>店內庫存</th><
+          th>更新時間</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="spshopBody"></tbody>
@@ -1565,9 +1615,27 @@ async function renderTab5(root){
 
   const list = el('div',{class:'table-wrap',style:'margin-top:10px'});
   list.innerHTML = `
+      <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 25%;">
+      <col style="width: 8%;">
+      <col style="width: 8%;">
+    </colgroup>
     <table>
       <thead>
-        <tr><th>角色</th><th>欄位</th><th>裝備</th><th>效果</th><th>可用次數</th><th>鎖定</th><th></th></tr>
+        <tr>
+        <th>角色</th>
+        <th>欄位</th>
+        <th>裝備</th>
+        <th>效果</th
+        ><th>可用次數</th>
+        <th>鎖定</th>
+        <th></th>
+        
+        </tr>
       </thead>
       <tbody id="battleBody"></tbody>
     </table>`;
@@ -1697,9 +1765,19 @@ async function renderTab6(root){
 
   const list = el('div',{class:'table-wrap',style:'margin-top:10px'});
   list.innerHTML = `
+        <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 8%;">
+    </colgroup>
     <table>
-      <thead><tr>
-        <th>地區</th><th>課程</th><th>台詞</th><th></th>
+      <thead>
+      <tr>
+        <th>地區</th>
+        <th>課程</th>
+        <th>台詞</th>
+        <th></th>
       </tr></thead>
       <tbody id="teacherBody"></tbody>
     </table>`;
@@ -1850,10 +1928,21 @@ async function renderTab7(root){
   // ===== 交易列表（表頭改成「金流」單欄） =====
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
+        <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 25%;">
+      <col style="width: 8%;">
+      <col style="width: 8%;">
+    </colgroup>
     <table>
       <thead>
         <tr>
-          <th>時間</th><th>行動</th><th>幣別</th><th>金流</th><th>道具</th>
+          <th>時間</th>
+          <th>行動</th>
+          <th>幣別</th>
+          <th>金流</th>
+          <th>道具</th>
         </tr>
       </thead>
       <tbody id="t7TxBody"></tbody>
