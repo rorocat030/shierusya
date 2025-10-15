@@ -1246,7 +1246,9 @@ async function renderTab4Spshop(root){
   // ---- 列表：只顯示目前分店的上架商品
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
-      <colgroup>
+
+    <table>
+          <colgroup>
       <col style="width: 20%;">
       <col style="width: 15%;">
       <col style="width: 15%;">
@@ -1254,7 +1256,6 @@ async function renderTab4Spshop(root){
       <col style="width: 25%;">
       <col style="width: 8%;">
     </colgroup>
-    <table>
       <thead>
         <tr>
           <th>商品名稱</th>
@@ -1617,7 +1618,9 @@ async function renderTab5(root){
 
   const list = el('div',{class:'table-wrap',style:'margin-top:10px'});
   list.innerHTML = `
-      <colgroup>
+
+    <table>
+          <colgroup>
       <col style="width: 20%;">
       <col style="width: 15%;">
       <col style="width: 15%;">
@@ -1626,7 +1629,6 @@ async function renderTab5(root){
       <col style="width: 8%;">
       <col style="width: 8%;">
     </colgroup>
-    <table>
       <thead>
         <tr>
         <th>角色</th>
@@ -1767,13 +1769,14 @@ async function renderTab6(root){
 
   const list = el('div',{class:'table-wrap',style:'margin-top:10px'});
   list.innerHTML = `
-        <colgroup>
+
+    <table>
+            <colgroup>
       <col style="width: 20%;">
       <col style="width: 15%;">
       <col style="width: 15%;">
       <col style="width: 8%;">
     </colgroup>
-    <table>
       <thead>
       <tr>
         <th>地區</th>
@@ -1930,14 +1933,15 @@ async function renderTab7(root){
   // ===== 交易列表（表頭改成「金流」單欄） =====
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
-        <colgroup>
+
+    <table>
+            <colgroup>
       <col style="width: 20%;">
       <col style="width: 15%;">
       <col style="width: 25%;">
       <col style="width: 8%;">
       <col style="width: 8%;">
     </colgroup>
-    <table>
       <thead>
         <tr>
           <th>時間</th>
