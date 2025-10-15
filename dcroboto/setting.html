@@ -608,7 +608,9 @@ async function renderTab2(root){
   // 一覽表
   const list = el('div', {class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
-      <colgroup>
+     
+    <table>
+     <colgroup>
       <col style="width: 20%;">
       <col style="width: 15%;">
       <col style="width: 15%;">
@@ -619,7 +621,6 @@ async function renderTab2(root){
       <col style="width: 25%;">
       <col style="width: 8%;">
     </colgroup>
-    <table>
       <thead>
         <tr>
           <th>名稱</th>
