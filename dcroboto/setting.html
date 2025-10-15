@@ -943,7 +943,7 @@ async function renderTab3(root){
 
 
 // ------------------------
-// TAP4：販售道具（分類篩選、圖片彈窗、戰鬥欄位移到倒數第二、簡介/效果用 textarea）
+// TAP4：販售道具（分類篩選、圖片獨立一欄「上方預覽、下方按鈕」、戰鬥欄位移到倒數第三、簡介/效果用 textarea）
 // ------------------------
 async function renderTab4(root){
   const wrap = el('div',{class:'card'});
@@ -978,18 +978,19 @@ async function renderTab4(root){
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
     <table>
-    <colgroup>
-      <col style="width: 10%;">
-      <col style="width: 15%;">
-      <col style="width: 10%;">
-      <col style="width: 8%;">
-      <col style="width: 6%;">
-      <col style="width: 15%;">
-      <col style="width: 8%;">
-      <col style="width: 5%;">
-      <col style="width: 5%;">
-      <col style="width: 10%;">
-    </colgroup>
+      <colgroup>
+        <col style="width: 10%;">   <!-- 名稱 -->
+        <col style="width: 15%;">   <!-- 簡介 -->
+        <col style="width: 9%;">    <!-- 幣別 -->
+        <col style="width: 7%;">    <!-- 售價 -->
+        <col style="width: 6%;">    <!-- 庫存 -->
+        <col style="width: 14%;">   <!-- 效果 -->
+        <col style="width: 8%;">    <!-- 程式碼 -->
+        <col style="width: 6%;">    <!-- 可用次數 -->
+        <col style="width: 5%;">    <!-- 戰鬥 -->
+        <col style="width: 10%;">   <!-- 圖片 -->
+        <col style="width: 10%;">   <!-- 操作 -->
+      </colgroup>
       <thead>
         <tr>
           <th>名稱</th>
@@ -1001,7 +1002,8 @@ async function renderTab4(root){
           <th>程式碼</th>
           <th>可用次數</th>
           <th>戰鬥</th>
-          <th></th>
+          <th>圖片</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody id="shopBody"></tbody>
@@ -1009,7 +1011,7 @@ async function renderTab4(root){
   wrap.append(f, tool, list);
   root.append(wrap);
 
-  // ========= 圖片彈窗（沿用、可重用） =========
+  // ========= 圖片彈窗（沿用 TAP8 的上方預覽、下方按鈕風格） =========
   let IMG_MODAL = null;
   function ensureImgModalDOM(){
     if (IMG_MODAL) return IMG_MODAL;
@@ -1024,11 +1026,9 @@ async function renderTab4(root){
             <input id="imgUrlInput" type="text" placeholder="https://…" />
             <div class="help">貼上可直接存取的圖片網址，下方會即時預覽。留空按「確定」可清除圖片。</div>
           </div>
-          <div class="field">
-            <div style="border:1px solid #e6eef6;border-radius:8px;padding:8px;background:#f9fbff;text-align:center;">
-              <img id="imgPreview" alt="預覽" style="max-width:100%;max-height:260px;display:none;" />
-              <div id="imgPreviewEmpty" class="muted">（無圖）</div>
-            </div>
+          <div class="field" style="text-align:center;">
+            <img id="imgPreview" alt="預覽" style="max-width:100%;max-height:260px;display:none;" />
+            <div id="imgPreviewEmpty" class="muted">（無圖）</div>
           </div>
           <div class="row">
             <span class="msg" id="imgMsg"></span>
@@ -1065,7 +1065,7 @@ async function renderTab4(root){
     IMG_MODAL = { show, hide, input, setPreview, msg, save };
     return IMG_MODAL;
   }
-  function openImgModalForRow(row){
+  function openImgModalForRow(row, onChanged){
     const m = ensureImgModalDOM();
     m.input.value = row.img_url || '';
     m.setPreview(m.input.value);
@@ -1077,7 +1077,9 @@ async function renderTab4(root){
       const { error } = await adminClient.from('shop_items').update({ img_url: url }).eq('id', row.id);
       m.save.disabled = false;
       if (error){ m.msg.textContent = '儲存失敗：' + (error.message||''); return; }
-      row.img_url = url; m.hide();
+      row.img_url = url;
+      if (typeof onChanged === 'function') onChanged(url);
+      m.hide();
     };
     m.save.addEventListener('click', m._saveHandler);
     m.show();
@@ -1095,7 +1097,6 @@ async function renderTab4(root){
       item_effect:f_effect.value || null,
       effect_code:f_code.value || null,
       max_uses:   f_uses.value ? Number(f_uses.value) : null,
-      // 不送 is_battle_item → 後端預設 false
     };
     const { error } = await adminClient.from('shop_items').insert(body);
     add.disabled=false;
@@ -1118,7 +1119,7 @@ async function renderTab4(root){
     if (type) q = q.eq('price_type', type);
     const { data, error } = await q;
     const tb = $('#shopBody'); tb.innerHTML='';
-    if (error){ tb.innerHTML = `<tr><td colspan=10 class="err">讀取失敗：${error.message}</td></tr>`; return; }
+    if (error){ tb.innerHTML = `<tr><td colspan=11 class="err">讀取失敗：${error.message}</td></tr>`; return; }
     (data||[]).forEach(r=>tb.appendChild(row(r)));
     toolMsg.textContent = type ? `只顯示：${type}` : '顯示全部';
   }
@@ -1153,12 +1154,25 @@ async function renderTab4(root){
     const code  = el('input',{type:'text', value:r.effect_code||''});
     const uses  = el('input',{type:'number', value: r.max_uses==null?'':r.max_uses});
 
-    // ★ 戰鬥用品（移到操作前一格）
+    // ★ 戰鬥用品
     const battle = el('input',{type:'checkbox'}); 
     battle.checked = !!r.is_battle_item;
 
+    // ★ 圖片欄（上方預覽、下方按鈕）
+    const imgBox = document.createElement('div');
+    imgBox.style.textAlign = 'center';
+    const img = document.createElement('img');
+    img.style.maxWidth='100%';
+    img.style.maxHeight='76px';
+    img.style.display = r.img_url ? 'block' : 'none';
+    if (r.img_url) img.src = r.img_url;
+    const noImg = el('div',{class:'muted', text:'（無圖）'});
+    noImg.style.display = r.img_url ? 'none' : 'block';
+    const imgBtn = el('button',{class:'btn secondary small', style:'margin-top:6px;'},[document.createTextNode('圖片')]);
+    imgBox.append(img, noImg, imgBtn);
+
+    // 操作欄（只放「儲存／刪除」）
     const save = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
-    const img  = el('button',{class:'btn secondary small'},[document.createTextNode('圖片')]);
     const del  = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
 
     tr.append(
@@ -1170,19 +1184,29 @@ async function renderTab4(root){
       el('td',{},[effArea]),
       el('td',{},[code]),
       el('td',{},[uses]),
-      el('td',{},[battle]) // 戰鬥用品放在按鈕前一格
+      el('td',{},[battle]),
+      el('td',{},[imgBox]),
     );
-    const tbtn = el('td'); tbtn.append(save,' ',img,' ',del); tr.appendChild(tbtn);
+    const tbtn = el('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
 
+    // 開圖窗（更新預覽）
+    imgBtn.addEventListener('click', ()=> {
+      openImgModalForRow(r, (url)=>{
+        if (url){ img.src=url; img.style.display='block'; noImg.style.display='none'; }
+        else { img.removeAttribute('src'); img.style.display='none'; noImg.style.display='block'; }
+      });
+    });
+
+    // 儲存
     save.addEventListener('click', async()=>{
       save.disabled=true;
       const body={
         item_name:   name.value.trim(),
-        shop_desc:   descArea.value || null,     // ★ textarea
+        shop_desc:   descArea.value || null,
         price_type:  type.value,
         price:       Number(price.value||0),
         stock:       Number(stock.value||0),
-        item_effect: effArea.value || null,      // ★ textarea
+        item_effect: effArea.value || null,
         effect_code: code.value || null,
         max_uses:    uses.value ? Number(uses.value) : null,
         is_battle_item: !!battle.checked
@@ -1192,8 +1216,7 @@ async function renderTab4(root){
       if(!error){ save.textContent='已儲存'; setTimeout(()=>save.textContent='儲存',1000); }
     });
 
-    img.addEventListener('click', ()=> openImgModalForRow(r));
-
+    // 刪除
     del.addEventListener('click', async()=>{
       if(!confirm('確定刪除？')) return;
       const { error } = await adminClient.from('shop_items').delete().eq('id', r.id);
@@ -1206,248 +1229,7 @@ async function renderTab4(root){
   // 初次載入
   load();
 }
-// ------------------------
-// TAP4SPSHOP：其他商店（SPSHOP 分店庫存管理）
-// - 下拉選「已設定 mechanic_code=spshop 的地區」
-// - 選幣別 → 選該幣別商品 → 輸入庫存 → 儲存（upsert special_shop_stock）
-// - 下方列表只顯示「當前選取地區」的上架商品，可即時改庫存或刪除該品項
-// ------------------------
-async function renderTab4Spshop(root){
-  // 讀所有商品（拿來依幣別篩選）
-  const ALL_ITEMS = await loadShopItems(); // [{item_name, price_type, price, stock}, ...]
-  const itemByName = new Map(ALL_ITEMS.map(i => [i.item_name, i]));
 
-  // 抓已設定 spshop 的地區
-  const { data: AREAS, error: aErr } = await adminClient
-    .from('area')
-    .select('area_id, area_name')
-    .eq('area_type','特製')
-    .eq('mechanic_code','spshop')
-    .order('area_name',{ascending:true});
-
-  const wrap = el('div',{class:'card'});
-  wrap.append(el('div',{class:'row'},[
-    el('strong',{text:'其他商店（SPSHOP 分店庫存）'}),
-    el('span',{class:'chip',text:'special_shop_stock'})
-  ]));
-
-  // ---- 表頭控件：地區 + 幣別 + 商品 + 庫存 + 儲存
-  const form = el('div',{class:'grid grid-4'});
-
-  const f_area = document.createElement('select');
-  if (!AREAS || AREAS.length===0){
-    const o = document.createElement('option');
-    o.value=''; o.textContent='（尚無 SPSHOP 地區，請先到「地區表」建立 特製＋mechanic_code=spshop）';
-    f_area.appendChild(o);
-  }else{
-    AREAS.forEach(a => f_area.appendChild(el('option',{value:a.area_id, text:a.area_name})));
-  }
-
-  const f_curr = document.createElement('select');
-  f_curr.appendChild(el('option',{value:'', text:'（選幣別）'}));
-  CURRENCIES.forEach(v => f_curr.appendChild(el('option',{value:v, text:v})));
-
-  const f_item = document.createElement('select');
-  f_item.appendChild(el('option',{value:'', text:'（先選幣別）'}));
-
-  const f_stock = el('input',{type:'number', placeholder:'庫存（0=售罄）', min:0});
-  const btnSave = el('button',{class:'btn'},[document.createTextNode('上架／更新')]);
-  const msg = el('span',{class:'muted'});
-
-  form.append(
-    el('div',{},[el('strong',{text:'分店（SPSHOP 地區）'}), f_area]),
-    el('div',{},[el('strong',{text:'幣別'}), f_curr]),
-    el('div',{},[el('strong',{text:'商品（依幣別）'}), f_item]),
-    el('div',{},[el('strong',{text:'庫存'}), f_stock]),
-    btnSave
-  );
-  wrap.append(form, msg);
-
-  // ---- 列表：只顯示目前分店的上架商品
-  const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
-  list.innerHTML = `
-
-    <table>
-  <colgroup>
-      <col style="width: 20%;">
-      <col style="width: 10%;">
-      <col style="width: 5%;">
-      <col style="width: 9%;">
-      <col style="width: 15%;">
-      <col style="width: 7%;">
-    </colgroup>
-      <thead>
-        <tr>
-          <th>商品名稱</th>
-          <th>幣別</th>
-          <th>單價</th>
-          <th>店內庫存</th>
-          <th>更新時間</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="spshopBody"></tbody>
-    </table>`;
-  root.append(wrap, list);
-
-  // ---- 幫助函式
-  function fillItemsByCurrency(){
-    const cat = f_curr.value;
-    f_item.innerHTML = '';
-    if (!cat){
-      f_item.appendChild(el('option',{value:'', text:'（先選幣別）'}));
-      return;
-    }
-    f_item.appendChild(el('option',{value:'', text:'（選擇商品）'}));
-    ALL_ITEMS
-      .filter(i => i.price_type === cat)
-      .sort((a,b) => a.item_name.localeCompare(b.item_name,'zh-Hant'))
-      .forEach(i => {
-        const label = `${i.item_name}｜${i.price_type} ${i.price}`;
-        f_item.appendChild(el('option',{value:i.item_name, text:label}));
-      });
-  }
-
-  async function preloadStockForSelection(){
-    // 選了地區 + 商品 → 查是否已上架，若有就帶出庫存
-    const areaId = f_area.value, itemName = f_item.value;
-    if (!areaId || !itemName){ f_stock.value=''; return; }
-    const { data } = await adminClient
-      .from('special_shop_stock')
-      .select('stock')
-      .eq('area_id', areaId)
-      .eq('item_name', itemName)
-      .maybeSingle();
-    f_stock.value = data?.stock ?? '';
-  }
-
-  async function loadAreaStockList(){
-  const tb = document.getElementById('spshopBody'); 
-  tb.innerHTML='';
-  const areaId = f_area.value;
-  if (!areaId){ 
-    tb.innerHTML = `<tr><td colspan="6" class="muted">請先選擇分店。</td></tr>`;
-    return;
-  }
-
-  // 讀該分店已上架的商品（JOIN shop_items 拿幣別與單價）
-  const { data, error } = await adminClient
-    .from('special_shop_stock')
-    .select(`item_name, stock, updated_at, shop_items(price, price_type)`)
-    .eq('area_id', areaId)
-    .order('item_name',{ascending:true});
-
-  if (error){
-    tb.innerHTML = `<tr><td colspan="6" class="err">${error.message}</td></tr>`;
-    return;
-  }
-
-  // ← 這裡新增幣別篩選（有選幣別就只顯示該幣別）
-  const cat = f_curr.value; // '' 代表不篩選
-  const rows = (data || []).filter(r => {
-    if (!cat) return true;
-    const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? null);
-    return priceType === cat;
-  });
-
-  if (!rows.length){
-    tb.innerHTML = `<tr><td colspan="6" class="muted">沒有符合的商品${cat ? `（已套用幣別：${cat}）` : ''}。</td></tr>`;
-    return;
-  }
-
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
-    const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? '-');
-    const price     = r.shop_items?.price ?? (itemByName.get(r.item_name)?.price ?? '-');
-
-    const stockInput = el('input',{type:'number', min:0, value:String(r.stock)});
-    stockInput.style.width = '110px';
-
-    const btnUpdate = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
-    const btnDel    = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
-
-    tr.innerHTML = `
-      <td>${r.item_name}</td>
-      <td>${priceType}</td>
-      <td class="mono">${price}</td>
-    `;
-    const tdStock = document.createElement('td'); tdStock.appendChild(stockInput);
-    const tdTime  = document.createElement('td'); tdTime.textContent = fmtTime(r.updated_at);
-    const tdBtn   = document.createElement('td'); tdBtn.append(btnUpdate, ' ', btnDel);
-    tr.appendChild(tdStock); tr.appendChild(tdTime); tr.appendChild(tdBtn);
-    tb.appendChild(tr);
-
-    btnUpdate.addEventListener('click', async ()=>{
-      btnUpdate.disabled=true;
-      const newStock = Math.max(0, Number(stockInput.value||0));
-      const { error } = await adminClient
-        .from('special_shop_stock')
-        .update({ stock: newStock })
-        .eq('area_id', areaId)
-        .eq('item_name', r.item_name);
-      btnUpdate.disabled=false;
-      if (!error){ btnUpdate.textContent='已儲存'; setTimeout(()=>btnUpdate.textContent='儲存', 900); loadAreaStockList(); }
-    });
-
-    btnDel.addEventListener('click', async ()=>{
-      if (!confirm(`刪除上架「${r.item_name}」？`)) return;
-      const { error } = await adminClient
-        .from('special_shop_stock')
-        .delete()
-        .eq('area_id', areaId)
-        .eq('item_name', r.item_name);
-      if (!error) tr.remove();
-    });
-  });
-}
-
-
-  // ---- 事件
-f_curr.addEventListener('change', ()=>{ 
-  fillItemsByCurrency(); 
-  f_stock.value=''; 
-  loadAreaStockList();   // ← 幣別切換時也刷新下方列表
-});
-  f_item.addEventListener('change', preloadStockForSelection);
-  f_area.addEventListener('change', ()=>{ preloadStockForSelection(); loadAreaStockList(); });
-
-  btnSave.addEventListener('click', async ()=>{
-    btnSave.disabled = true; msg.textContent = '處理中…';
-    try{
-      const areaId = f_area.value;
-      const curr   = f_curr.value;
-      const item   = f_item.value;
-      const stockV = Number(f_stock.value || 0);
-
-      if (!areaId) throw new Error('請先選擇分店地區');
-      if (!curr)   throw new Error('請先選擇幣別');
-      if (!item)   throw new Error('請選擇商品');
-      if (!Number.isFinite(stockV) || stockV < 0) throw new Error('庫存需為 0 或正整數');
-
-      // upsert: (area_id, item_name) 唯一鍵
-      const payload = { area_id: areaId, item_name: item, stock: stockV };
-      const { error } = await adminClient
-        .from('special_shop_stock')
-        .upsert(payload, { onConflict: 'area_id,item_name' });
-      if (error) throw error;
-
-      msg.textContent = '已上架／更新。';
-      await loadAreaStockList();
-      await preloadStockForSelection(); // 回填最新庫存
-    }catch(e){
-      msg.textContent = '失敗：' + (e.message || e);
-    }finally{
-      btnSave.disabled = false;
-    }
-  });
-
-  // ---- 初始
-  fillItemsByCurrency();
-  if (AREAS && AREAS.length){
-    f_area.value = AREAS[0].area_id;
-    await loadAreaStockList();
-  }
-}
 
 // ===== TAP：贈送道具（依幣別→選道具→選學生；數量可負=回收）=====
 async function renderTab4Gift(root){
