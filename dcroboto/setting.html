@@ -2035,12 +2035,12 @@ async function renderTab8(root){
 
   // ===== 新增表單 =====
   const form = el('div',{class:'grid grid-4'});
-  const f_cat    = el('input',{type:'text', placeholder:'地區分類'});
+  const f_cat    = el('input',{type:'text', placeholder:'搜尋顯示用'});
   const f_name   = el('input',{type:'text', placeholder:'地區名稱'});
   const f_chan   = el('input',{type:'text', placeholder:'頻道ID（可空）'});
   const f_thread = el('input',{type:'text', placeholder:'討論串ID（可空）'});
   const f_desc   = document.createElement('textarea');
-  f_desc.placeholder = '文本（可多行）'; f_desc.style.minHeight='80px'; f_desc.style.resize='vertical';
+  f_desc.placeholder = '文本'; f_desc.style.minHeight='80px'; f_desc.style.resize='vertical';
   const btnAdd   = el('button',{class:'btn'},[document.createTextNode('新增')]);
   form.append(f_cat, f_name, f_chan, f_thread, f_desc, btnAdd);
   wrap.append(form);
