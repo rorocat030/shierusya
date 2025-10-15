@@ -611,15 +611,15 @@ async function renderTab2(root){
      
     <table>
      <colgroup>
-      <col style="width: 20%;">
       <col style="width: 15%;">
-      <col style="width: 15%;">
-      <col style="width: 15%;">
-      <col style="width: 25%;">
-      <col style="width: 8%;">
-      <col style="width: 15%;">
-      <col style="width: 25%;">
-      <col style="width: 8%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 5%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
     </colgroup>
       <thead>
         <tr>
@@ -978,10 +978,30 @@ async function renderTab4(root){
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
     <table>
+         <colgroup>
+      <col style="width: 15%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 5%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+      <col style="width: 10%;">
+    </colgroup>
       <thead>
         <tr>
-          <th>名稱</th><th>簡介</th><th>幣別</th><th>售價</th><th>庫存</th>
-          <th>效果</th><th>程式碼</th><th>可用次數</th><th>戰鬥</th><th></th>
+          <th>名稱</th>
+          <th>簡介</th>
+          <th>幣別</th>
+          <th>售價</th>
+          <th>庫存</th>
+          <th>效果</th>
+          <th>程式碼</th>
+          <th>可用次數</th>
+          <th>戰鬥</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="shopBody"></tbody>
