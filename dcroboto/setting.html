@@ -190,6 +190,33 @@
     };
     const fmtTime = (s)=> s? new Date(s).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' }) : '-';
 
+
+// ===== 全域 Toast（一次性） =====
+function ensureToastBox(){
+  if (document.getElementById('toastBox')) return;
+  const css = document.createElement('style');
+  css.textContent = `
+  #toastBox{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:99999}
+  .toast{background:#143158;color:#fff;padding:10px 12px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:.98}
+  .toast.ok{background:#157f3b}.toast.err{background:#b42318}.toast.warn{background:#b54708}
+  `;
+  document.head.appendChild(css);
+  const box = document.createElement('div'); box.id = 'toastBox'; document.body.appendChild(box);
+}
+function toast(msg, kind='ok', ms=1600){
+  ensureToastBox();
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`;
+  el.textContent = msg;
+  document.getElementById('toastBox').appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .25s'; el.style.opacity='0';
+    setTimeout(()=> el.remove(), 280);
+  }, ms);
+}
+
+
+    
+
     // 讀商品（用於 TAB7 下拉與自動帶幣別/價格/庫存）
 async function loadShopItems(){
   const { data, error } = await adminClient
@@ -2011,162 +2038,199 @@ async function renderTab7(root){
 
 // ------------------------
 // TAP8：場景介紹（map_locations）
+//   欄位建議：id (pk), server_id, category, area_name,
+//            dc_channel_id, dc_thread_id, description, image_url, updated_at
 // ------------------------
 async function renderTab8(root){
+  // --- 若沒內建 toast，這裡補一個輕量版 ---
+  if (typeof window.toast !== 'function') {
+    (function ensureToast(){
+      const css = document.createElement('style');
+      css.textContent = `
+      #toastBox{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:99999}
+      .toast{background:#143158;color:#fff;padding:10px 12px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:.98}
+      .toast.ok{background:#157f3b}.toast.err{background:#b42318}.toast.warn{background:#b54708}`;
+      document.head.appendChild(css);
+      const box = document.createElement('div'); box.id = 'toastBox'; document.body.appendChild(box);
+      window.toast = (msg, kind='ok', ms=1600) => {
+        const el = document.createElement('div');
+        el.className = `toast ${kind}`; el.textContent = msg;
+        box.appendChild(el);
+        setTimeout(()=>{ el.style.transition='opacity .25s'; el.style.opacity='0';
+          setTimeout(()=> el.remove(), 280);
+        }, ms);
+      };
+    })();
+  }
+
+  // --- 內用圖片彈窗（和其他分頁的圖片彈窗互不干擾） ---
+  function openImgModalForMapRow(row, onSaved){
+    let mask = document.getElementById('mapImgMask');
+    if (!mask){
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <div id="mapImgMask" class="modal-mask" aria-hidden="true" style="display:none;">
+          <div class="modal">
+            <div class="close-x" id="mapImgClose">✕</div>
+            <h3>場景圖片</h3>
+            <div class="field">
+              <label>圖片網址</label>
+              <input id="mapImgInput" type="text" placeholder="https://…"/>
+              <div class="help">貼上可直接存取的圖片網址，下方即時預覽；留空→清除圖片。</div>
+            </div>
+            <div class="field">
+              <div style="border:1px solid #e6eef6;border-radius:8px;padding:8px;background:#f9fbff;text-align:center;">
+                <img id="mapImgPreview" alt="預覽" style="max-width:100%;max-height:260px;display:none;" />
+                <div id="mapImgEmpty" class="muted">（尚無圖片）</div>
+              </div>
+            </div>
+            <div class="row">
+              <span class="msg" id="mapImgMsg"></span>
+              <button class="btn secondary" id="mapImgCancel">取消</button>
+              <button class="btn" id="mapImgSave">確定</button>
+            </div>
+          </div>
+        </div>
+      `.trim();
+      document.body.appendChild(wrap.firstElementChild);
+    }
+    const m = {
+      mask: document.getElementById('mapImgMask'),
+      input: document.getElementById('mapImgInput'),
+      pv: document.getElementById('mapImgPreview'),
+      empty: document.getElementById('mapImgEmpty'),
+      msg: document.getElementById('mapImgMsg'),
+      save: document.getElementById('mapImgSave'),
+      cancel: document.getElementById('mapImgCancel'),
+      closeX: document.getElementById('mapImgClose'),
+      show(){ this.mask.style.display='flex'; this.mask.setAttribute('aria-hidden','false'); setTimeout(()=>this.input.focus(),0); },
+      hide(){ this.mask.style.display='none'; this.mask.setAttribute('aria-hidden','true'); this.msg.textContent=''; }
+    };
+    function setPreview(url){
+      if (url){ m.pv.src=url; m.pv.style.display='block'; m.empty.style.display='none'; }
+      else { m.pv.removeAttribute('src'); m.pv.style.display='none'; m.empty.style.display='block'; }
+    }
+    m.pv.onerror = ()=>{ m.msg.textContent='圖片載入失敗，請確認網址。'; m.pv.style.display='none'; m.empty.style.display='block'; };
+    m.input.oninput = ()=>{ m.msg.textContent=''; setPreview(m.input.value.trim()); };
+
+    // 初始化
+    m.input.value = row.image_url || '';
+    setPreview(m.input.value);
+    m.msg.textContent = '';
+
+    // 綁定
+    const saveHandler = async ()=>{
+      m.save.disabled = true; m.msg.textContent = '儲存中…';
+      const url = (m.input.value || '').trim() || null;
+      const { error } = await adminClient.from('map_locations').update({ image_url: url }).eq('id', row.id);
+      m.save.disabled = false;
+      if (error){ m.msg.textContent = '儲存失敗：' + (error.message||''); return; }
+      row.image_url = url;    // 同步快取
+      toast('圖片已更新', 'ok');
+      if (onSaved) onSaved(url);
+      m.hide();
+    };
+    const cancelHandler = ()=> m.hide();
+
+    m.save.onclick = saveHandler;
+    m.cancel.onclick = cancelHandler;
+    m.closeX.onclick = cancelHandler;
+    m.show();
+  }
+
+  // ===== 容器與工具列 =====
   const wrap = el('div',{class:'card'});
   wrap.append(el('div',{class:'row'},[
     el('strong',{text:'場景介紹'}),
     el('span',{class:'chip',text:'map_locations'})
   ]));
 
-  // ===== 伺服器選擇 =====
-  const srvBar   = el('div',{class:'toolbar'});
-  const srvSel   = document.createElement('select');
-  const srvReload= el('button',{class:'btn secondary small'},[document.createTextNode('重載伺服器')]);
-  const srvInfo  = el('span',{class:'muted'});
+  // 伺服器列
+  const srvBar = el('div',{class:'toolbar'});
+  const srvSel = document.createElement('select');
+  const srvReload = el('button',{class:'btn secondary small'},[document.createTextNode('重載伺服器')]);
+  const srvInfo = el('span',{class:'muted'});
   srvBar.append(el('strong',{text:'伺服器'}), srvSel, srvReload, srvInfo);
-  wrap.append(srvBar);
 
-  // ===== 分類搜尋（即時） =====
-  const filterBar = el('div',{class:'toolbar'});
-  const qCat = el('input',{type:'text', placeholder:'搜尋地區分類（空白=全部）', style:'min-width:220px'});
-  filterBar.append(el('strong',{text:'分類搜尋'}), qCat);
-  wrap.append(filterBar);
+  // 搜尋列（依「地區分類」）
+  const qBar = el('div',{class:'toolbar'});
+  const qInput = el('input',{type:'text', placeholder:'搜尋「地區分類」…（空白＝全部）', style:'min-width:240px'});
+  const qClear = el('button',{class:'btn secondary small'},[document.createTextNode('清除搜尋')]);
+  qBar.append(el('strong',{text:'分類篩選'}), qInput, qClear);
+
+  wrap.append(srvBar, qBar);
+  root.append(wrap);
 
   // ===== 新增表單 =====
   const form = el('div',{class:'grid grid-4'});
-  const f_cat    = el('input',{type:'text', placeholder:'搜尋顯示用'});
-  const f_name   = el('input',{type:'text', placeholder:'地區名稱'});
-  const f_chan   = el('input',{type:'text', placeholder:'頻道ID（可空）'});
-  const f_thread = el('input',{type:'text', placeholder:'討論串ID（可空）'});
-  const f_desc   = document.createElement('textarea');
-  f_desc.placeholder = '文本'; f_desc.style.minHeight='80px'; f_desc.style.resize='vertical';
-  const btnAdd   = el('button',{class:'btn'},[document.createTextNode('新增')]);
+  const f_cat   = el('input',{type:'text', placeholder:'地區分類（例：教學區 / 行政區）'});
+  const f_name  = el('input',{type:'text', placeholder:'地區名稱'});
+  const f_chan  = el('input',{type:'text', placeholder:'Discord 頻道 ID（可空）'});
+  const f_thread= el('input',{type:'text', placeholder:'Discord 討論串 ID（可空；若填以討論串為主）'});
+  const f_desc  = document.createElement('textarea');
+  f_desc.placeholder = '文本（多行可伸縮）'; f_desc.style.minHeight='80px'; f_desc.style.resize='vertical';
+  const btnAdd  = el('button',{class:'btn'},[document.createTextNode('新增場景')]);
+
   form.append(f_cat, f_name, f_chan, f_thread, f_desc, btnAdd);
-  wrap.append(form);
+  root.append(form);
 
   // ===== 列表 =====
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
-  list.innerHTML = `
-    <table>
-      <colgroup>
-        <col style="width: 20%;"><col style="width: 15%;"><col style="width: 15%;">
-        <col style="width: 15%;"><col style="width: 25%;"><col style="width: 10%;">
-      </colgroup>
-      <thead>
-        <tr>
-          <th>地區分類</th><th>地區名稱</th><th>頻道ID</th><th>討論串ID</th><th>文本</th><th>圖片連結</th>
-        </tr>
-      </thead>
-      <tbody id="mapBody"></tbody>
-    </table>`;
-  root.append(wrap, list);
+  const table = document.createElement('table');
+  table.innerHTML = `
+    <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 15%;">
+      <col style="width: 25%;">
+      <col style="width: 8%;">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>地區分類</th><th>地區名稱</th><th>頻道ID</th><th>討論串ID</th><th>文本</th><th>圖片</th>
+      </tr>
+    </thead>
+    <tbody id="mapBody"></tbody>`;
+  list.appendChild(table);
+  root.append(list);
 
-  // ========= 圖片彈窗（本分頁用） =========
-  let IMG_MODAL = null;
-  function ensureImgModalForMap(){
-    if (IMG_MODAL) return IMG_MODAL;
-    const wrap = document.createElement('div');
-    wrap.innerHTML = `
-      <div id="mapImgMask" class="modal-mask" aria-hidden="true" style="display:none;">
-        <div class="modal">
-          <div class="close-x" id="mapImgClose">✕</div>
-          <h3>場景圖片</h3>
-          <div class="field">
-            <label>圖片網址</label>
-            <input id="mapImgInput" type="text" placeholder="https://…" />
-            <div class="help">貼上可直接存取的圖片網址，下方會即時預覽。留空按「確定」可清除圖片。</div>
-          </div>
-          <div class="field">
-            <div style="border:1px solid #e6eef6;border-radius:8px;padding:8px;background:#f9fbff;text-align:center;">
-              <img id="mapImgPreview" alt="預覽" style="max-width:100%;max-height:260px;display:none;" />
-              <div id="mapImgEmpty" class="muted">（尚無圖片）</div>
-            </div>
-          </div>
-          <div class="row">
-            <span class="msg" id="mapImgMsg"></span>
-            <button class="btn secondary" id="mapImgCancel">取消</button>
-            <button class="btn" id="mapImgSave">確定</button>
-          </div>
-        </div>
-      </div>
-    `.trim();
-    document.body.appendChild(wrap.firstElementChild);
-
-    const mask   = document.getElementById('mapImgMask');
-    const input  = document.getElementById('mapImgInput');
-    const pv     = document.getElementById('mapImgPreview');
-    const empty  = document.getElementById('mapImgEmpty');
-    const msg    = document.getElementById('mapImgMsg');
-    const save   = document.getElementById('mapImgSave');
-    const cancel = document.getElementById('mapImgCancel');
-    const closeX = document.getElementById('mapImgClose');
-
-    function setPreview(url){
-      if (url){ pv.src=url; pv.style.display='block'; empty.style.display='none'; }
-      else { pv.removeAttribute('src'); pv.style.display='none'; empty.style.display='block'; }
-    }
-    pv.onerror = () => { msg.textContent='圖片載入失敗，請確認網址。'; pv.style.display='none'; empty.style.display='block'; };
-    input.addEventListener('input', ()=>{ msg.textContent=''; setPreview(input.value.trim()); });
-
-    function show(){ mask.style.display='flex'; mask.setAttribute('aria-hidden','false'); setTimeout(()=>input.focus(),0); }
-    function hide(){ mask.style.display='none'; mask.setAttribute('aria-hidden','true'); msg.textContent=''; }
-
-    closeX.addEventListener('click', hide);
-    cancel.addEventListener('click', hide);
-
-    IMG_MODAL = { show, hide, input, setPreview, msg, save };
-    return IMG_MODAL;
-  }
-  function openImgModalForMapRow(row, onSaved){
-    const m = ensureImgModalForMap();
-    m.input.value = row.image_url || '';
-    m.setPreview(m.input.value);
-    m.msg.textContent = '';
-    if (m._saveHandler) m.save.removeEventListener('click', m._saveHandler);
-    m._saveHandler = async () => {
-      m.save.disabled = true; m.msg.textContent = '儲存中…';
-      const url = (m.input.value || '').trim() || null;
-      const { error } = await adminClient.from('map_locations').update({ image_url: url }).eq('id', row.id);
-      m.save.disabled = false;
-      if (error){ m.msg.textContent = '儲存失敗：' + (error.message||''); return; }
-      row.image_url = url; m.hide(); if (onSaved) onSaved(url);
-    };
-    m.save.addEventListener('click', m._saveHandler);
-    m.show();
-  }
-
-  // ===== 狀態 =====
+  // ===== 內部狀態 =====
   let CUR_SERVER = null;
   let SERVERS = [];
-  let ALL_ROWS = [];   // 目前伺服器所有 rows
-  let CUR_Q = '';     // 分類搜尋字串
+  let ALL_ROWS = [];        // 當前伺服器的所有資料（一次抓，之後本地篩選）
+  let CUR_Q = '';           // 目前分類關鍵字（小寫）
 
-  // ===== 讀伺服器 =====
+  // ===== 載入伺服器 =====
   async function loadServers(){
     const { data, error } = await adminClient
       .from('discord_servers')
       .select('server_id, server_name, is_active')
       .order('server_name',{ascending:true});
     SERVERS = data || [];
+
     srvSel.innerHTML = '';
     if (!SERVERS.length){
-      srvSel.appendChild(el('option',{value:'',text:'（尚無伺服器，先到 Discord /ping 註冊）'}));
-      CUR_SERVER = null; srvInfo.textContent=''; btnAdd.disabled=true;
-      renderRows([]); return;
+      const opt = document.createElement('option');
+      opt.value=''; opt.textContent='（尚無伺服器，請先在 Discord /ping 註冊）';
+      srvSel.appendChild(opt);
+      CUR_SERVER = null; srvInfo.textContent = '';
+      renderRows([]);
+      btnAdd.disabled = true;
+      return;
     }
     SERVERS.forEach(s=>{
-      const o = el('option',{value:s.server_id, text:`${s.server_name} (${s.server_id})${s.is_active?'':' [停用]'}`});
+      const o = document.createElement('option');
+      o.value = s.server_id;
+      o.textContent = `${s.server_name} (${s.server_id})${s.is_active?'':' [停用]'}`;
       srvSel.appendChild(o);
     });
-    if (!CUR_SERVER || !SERVERS.find(s=>s.server_id===CUR_SERVER)){
-      CUR_SERVER = SERVERS[0].server_id;
-    }
+    if (!CUR_SERVER || !SERVERS.find(s=>s.server_id===CUR_SERVER)) CUR_SERVER = SERVERS[0].server_id;
     srvSel.value = CUR_SERVER;
     const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
     srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
     btnAdd.disabled = !CUR_SERVER;
-    await loadRows();
+    await loadRows(); // 抓該伺服器資料
   }
 
   srvSel.addEventListener('change', async ()=>{
@@ -2178,126 +2242,203 @@ async function renderTab8(root){
   });
   srvReload.addEventListener('click', loadServers);
 
-  // ===== 新增 =====
-  btnAdd.addEventListener('click', async ()=>{
-    if (!CUR_SERVER){ alert('請先選擇伺服器'); return; }
-    btnAdd.disabled = true;
-    const body = {
-      server_id: CUR_SERVER,
-      category:  f_cat.value.trim() || null,
-      area_name: f_name.value.trim(),
-      dc_channel_id: f_chan.value || null,
-      dc_thread_id:  f_thread.value || null,
-      description:   f_desc.value || null
-    };
-    const { error } = await adminClient.from('map_locations').insert(body);
-    btnAdd.disabled = false;
-    if (error){ alert('新增失敗：' + (error.message||'')); return; }
-    // 清空
-    f_cat.value=''; f_name.value=''; f_chan.value=''; f_thread.value=''; f_desc.value='';
-    await loadRows(); // 維持目前搜尋 CUR_Q
-  });
-
-  // ===== 讀取 rows（依伺服器）並套用分類搜尋 =====
+  // ===== 讀資料（當前伺服器；一次抓齊，之後本地篩） =====
   async function loadRows(){
+    const tb = document.getElementById('mapBody'); tb.innerHTML='';
+    if (!CUR_SERVER){ ALL_ROWS=[]; return; }
     const { data, error } = await adminClient
       .from('map_locations')
       .select('*')
       .eq('server_id', CUR_SERVER)
       .order('category',{ascending:true})
       .order('area_name',{ascending:true});
-    if (error){ renderRows([]); return; }
     ALL_ROWS = data || [];
-    applyFilter();
+    renderRows(filterRows(ALL_ROWS, CUR_Q));
   }
-  function applyFilter(){
-    const tb = document.getElementById('mapBody'); tb.innerHTML='';
-    const kw = (CUR_Q||'').toLowerCase().trim();
-    const rows = !kw ? ALL_ROWS : ALL_ROWS.filter(r => (r.category||'').toLowerCase().includes(kw));
-    renderRows(rows);
-  }
-  qCat.addEventListener('input', ()=>{ CUR_Q = qCat.value; applyFilter(); });
 
-  // ===== 繪製 =====
+  // ===== 本地篩選（依分類關鍵字） =====
+  function filterRows(rows, q){
+    const kw = (q||'').toLowerCase().trim();
+    if (!kw) return rows.slice();
+    return rows.filter(r => String(r.category||'').toLowerCase().includes(kw));
+  }
+
+  // ===== 只渲染給定 rows（不中斷其他狀態） =====
   function renderRows(rows){
     const tb = document.getElementById('mapBody'); tb.innerHTML='';
-    if (!rows.length){
-      tb.innerHTML = `<tr><td colspan="6" class="muted">沒有資料${CUR_Q ? `（分類包含：${CUR_Q}）` : ''}。</td></tr>`;
-      return;
-    }
     rows.forEach(r => tb.appendChild(row(r)));
   }
 
+  // ===== 搜尋框：即時顯示/隱藏，不重抓、不重繪 =====
+  function applyFilterDOM(){
+    const kw = (CUR_Q||'').toLowerCase().trim();
+    const trs = document.querySelectorAll('#mapBody tr');
+    trs.forEach(tr => {
+      const cat = (tr.dataset.category || '').toLowerCase();
+      tr.style.display = !kw || cat.includes(kw) ? '' : 'none';
+    });
+  }
+
+  qInput.addEventListener('input', ()=>{
+    CUR_Q = qInput.value || '';
+    applyFilterDOM();
+  });
+  qClear.addEventListener('click', ()=>{
+    qInput.value=''; CUR_Q='';
+    applyFilterDOM();
+  });
+
+  // ===== 單列構建 =====
   function row(r){
     const tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.dataset.category = String(r.category || '');
 
-    const cat  = el('input',{type:'text', value:r.category||''});
-    const name = el('input',{type:'text', value:r.area_name||''});
-    const chan = el('input',{type:'text', value:r.dc_channel_id||''});
-    const thrd = el('input',{type:'text', value:r.dc_thread_id||''});
-
-    const desc = document.createElement('textarea');
+    const cat   = el('input',{type:'text', value: r.category || ''});
+    const name  = el('input',{type:'text', value: r.area_name || ''});
+    const chan  = el('input',{type:'text', value: r.dc_channel_id || ''});
+    const thrd  = el('input',{type:'text', value: r.dc_thread_id || ''});
+    const desc  = document.createElement('textarea');
     desc.value = r.description || '';
-    desc.style.minHeight = '80px';
-    desc.style.resize = 'vertical';
+    desc.style.minHeight='80px'; desc.style.resize='vertical';
 
-    const imgWrap = document.createElement('div');
+    // 圖片格：預覽 + 「圖片」按鈕
+    const imgBox = document.createElement('div');
     const img = document.createElement('img');
-    img.style.maxWidth='100%'; img.style.maxHeight='56px'; img.style.display = r.image_url ? 'block':'none';
+    img.style.maxWidth='100%'; img.style.maxHeight='76px'; img.style.display = r.image_url ? 'block' : 'none';
     if (r.image_url) img.src = r.image_url;
+    const noImg = el('div',{class:'muted', text:'（尚無圖片）'});
+    noImg.style.display = r.image_url ? 'none' : 'block';
+    const btnImg = el('button',{class:'btn secondary small', style:'margin-top:6px;'},[document.createTextNode('圖片')]);
+    imgBox.append(img, noImg, btnImg);
 
-    const btnImg  = el('button',{class:'btn small secondary', style:'margin-top:6px;'},[document.createTextNode('修改圖片')]);
-    const btnSave = el('button',{class:'btn small', style:'margin-left:6px;'},[document.createTextNode('儲存')]);
-    const btnDel  = el('button',{class:'btn small secondary', style:'margin-left:6px;'},[document.createTextNode('刪除')]);
+    const tdCat  = document.createElement('td'); tdCat.appendChild(cat);
+    const tdName = document.createElement('td'); tdName.appendChild(name);
+    const tdChan = document.createElement('td'); tdChan.appendChild(chan);
+    const tdThrd = document.createElement('td'); tdThrd.appendChild(thrd);
+    const tdDesc = document.createElement('td'); tdDesc.appendChild(desc);
+    const tdImg  = document.createElement('td'); tdImg.appendChild(imgBox);
 
-    imgWrap.append(img, btnImg, document.createElement('br'), btnSave, document.createTextNode(' '), btnDel);
+    tr.append(tdCat, tdName, tdChan, tdThrd, tdDesc, tdImg);
 
-    // 6 欄位
-    const td1 = document.createElement('td'); td1.appendChild(cat);
-    const td2 = document.createElement('td'); td2.appendChild(name);
-    const td3 = document.createElement('td'); td3.appendChild(chan);
-    const td4 = document.createElement('td'); td4.appendChild(thrd);
-    const td5 = document.createElement('td'); td5.appendChild(desc);
-    const td6 = document.createElement('td'); td6.appendChild(imgWrap);
+    // 每列下方加操作列（只要儲存/刪除）
+    const opTr = document.createElement('tr');
+    opTr.innerHTML = `<td colspan="6" style="background:#f9fbff;border-bottom:1px solid #edf3f9;">
+      <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end;">
+        <span class="muted">最後更新：${fmtTime(r.updated_at)}</span>
+        <button class="btn small"  data-act="save">儲存</button>
+        <button class="btn secondary small" data-act="del">刪除</button>
+      </div>
+    </td>`;
 
-    tr.append(td1,td2,td3,td4,td5,td6);
+    const btnSave = opTr.querySelector('[data-act=save]');
+    const btnDel  = opTr.querySelector('[data-act=del]');
 
-    // 行為：修改圖片 → 彈窗
+    btnSave.addEventListener('click', async ()=>{
+      btnSave.disabled = true;
+      try{
+        const payload = {
+          category: (cat.value || '').trim() || null,
+          area_name: (name.value || '').trim() || null,
+          dc_channel_id: chan.value || null,
+          dc_thread_id: thrd.value || null,
+          description: desc.value || null
+        };
+        const { error } = await adminClient.from('map_locations').update(payload).eq('id', r.id);
+        if (error) throw error;
+
+        // 同步快取
+        Object.assign(r, payload);
+
+        // 更新顯示資訊
+        tr.dataset.category = String(r.category || '');
+
+        // 若不再符合目前搜尋 → 隱藏這兩列
+        const kw = (CUR_Q||'').toLowerCase().trim();
+        const matches = !kw || String(r.category||'').toLowerCase().includes(kw);
+        tr.style.display   = matches ? '' : 'none';
+        opTr.style.display = matches ? '' : 'none';
+
+        btnSave.textContent = '已儲存';
+        toast('儲存成功', 'ok');
+        setTimeout(()=> btnSave.textContent='儲存', 900);
+      }catch(e){
+        toast('儲存失敗：' + (e.message||e), 'err', 2400);
+      }finally{
+        btnSave.disabled = false;
+      }
+    });
+
+    btnDel.addEventListener('click', async ()=>{
+      if (!confirm(`刪除「${r.area_name || r.id}」？`)) return;
+      const { error } = await adminClient.from('map_locations').delete().eq('id', r.id);
+      if (!error){
+        // 從快取移除
+        ALL_ROWS = ALL_ROWS.filter(x => x.id !== r.id);
+        tr.remove(); opTr.remove();
+        toast('已刪除', 'ok');
+      }
+    });
+
     btnImg.addEventListener('click', ()=>{
       openImgModalForMapRow(r, (url)=>{
-        if (url){ img.src = url; img.style.display='block'; }
-        else { img.removeAttribute('src'); img.style.display='none'; }
+        if (url){ img.src = url; img.style.display='block'; noImg.style.display='none'; }
+        else { img.removeAttribute('src'); img.style.display='none'; noImg.style.display='block'; }
       });
     });
 
-    // 行為：儲存（保持分類濾鏡不變）
-    btnSave.addEventListener('click', async ()=>{
-      btnSave.disabled = true;
-      const body = {
-        category:  cat.value.trim() || null,
-        area_name: name.value.trim() || null,
-        dc_channel_id: chan.value || null,
-        dc_thread_id:  thrd.value || null,
-        description:   desc.value || null
-      };
-      const { error } = await adminClient.from('map_locations').update(body).eq('id', r.id);
-      btnSave.disabled = false;
-      if (!error){ await loadRows(); } // 會自動 applyFilter()，維持 CUR_Q
-    });
-
-    // 行為：刪除
-    btnDel.addEventListener('click', async ()=>{
-      if (!confirm('確定刪除這筆場景介紹？')) return;
-      const { error } = await adminClient.from('map_locations').delete().eq('id', r.id);
-      if (!error){ tr.remove(); }
-    });
-
-    return tr;
+    // 回傳兩列（資料列 + 操作列）
+    const frag = document.createDocumentFragment();
+    frag.appendChild(tr);
+    frag.appendChild(opTr);
+    return frag;
   }
+
+  // ===== 新增（不中斷、不整表刷新） =====
+  btnAdd.addEventListener('click', async ()=>{
+    if (!CUR_SERVER){ alert('請先選擇伺服器'); return; }
+    btnAdd.disabled = true;
+    try{
+      const body = {
+        server_id: CUR_SERVER,
+        category:  f_cat.value.trim() || null,
+        area_name: f_name.value.trim() || null,
+        dc_channel_id: f_chan.value || null,
+        dc_thread_id:  f_thread.value || null,
+        description:   f_desc.value || null,
+        image_url: null
+      };
+      const { data, error } = await adminClient
+        .from('map_locations')
+        .insert(body)
+        .select('*')
+        .single();
+      if (error) throw error;
+
+      // 更新快取
+      ALL_ROWS.push(data);
+
+      // 若符合目前搜尋 → 直接 append；否則靜默新增
+      const kw = (CUR_Q||'').toLowerCase().trim();
+      const matches = !kw || (String(data.category||'').toLowerCase().includes(kw));
+      if (matches){
+        document.getElementById('mapBody').appendChild(row(data));
+      }
+
+      // 清表單 + 提示
+      f_cat.value=''; f_name.value=''; f_chan.value=''; f_thread.value=''; f_desc.value='';
+      toast('成功', 'ok');
+    }catch(e){
+      toast('失敗：' + (e.message||e), 'err', 2400);
+    }finally{
+      btnAdd.disabled = false;
+    }
+  });
 
   // 初始
   await loadServers();
 }
+
     
 
 
