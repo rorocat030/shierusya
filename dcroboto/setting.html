@@ -574,9 +574,18 @@ const EARN_KIND = {
 
 
 // ------------------------
-// TAP2：地區表 CRUD（支援多伺服器 + 型別篩選）
+// TAP2：地區表 CRUD（支援多伺服器 + 型別篩選 + 記住伺服器）
+// 依賴：adminClient, el, AREA_TYPES, isGameLike, fmtTime
 // ------------------------
 async function renderTab2(root){
+  // 偏好（沿用全域或就地建立）
+  const PREF = window.__PREF__ || (window.__PREF__ = {
+    get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+    set(k,v){ try { localStorage.setItem(k, v); } catch {} },
+    del(k){ try { localStorage.removeItem(k); } catch {} }
+  });
+  const KEY_SERVER = window.__KEY_SERVER__ || (window.__KEY_SERVER__ = 'pref.server_id');
+
   const wrap = el('div', {class:'card'});
 
   // ===== 伺服器選擇列 =====
@@ -591,7 +600,7 @@ async function renderTab2(root){
   ]));
   wrap.append(srvBar);
 
-  // ===== 型別篩選列（★ 新增） =====
+  // ===== 型別篩選列 =====
   const typeBar = el('div', {class:'toolbar'});
   const typeFilter = document.createElement('select');
   typeFilter.appendChild(el('option',{value:'', text:'（全部型別）'}));
@@ -618,19 +627,18 @@ async function renderTab2(root){
   // 一覽表
   const list = el('div', {class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
-     
     <table>
-     <colgroup>
-      <col style="width: 15%;">
-      <col style="width: 10%;">
-      <col style="width: 10%;">
-      <col style="width: 10%;">
-      <col style="width: 10%;">
-      <col style="width: 5%;">
-      <col style="width: 10%;">
-      <col style="width: 10%;">
-      <col style="width: 10%;">
-    </colgroup>
+      <colgroup>
+        <col style="width: 15%;">
+        <col style="width: 10%;">
+        <col style="width: 10%;">
+        <col style="width: 10%;">
+        <col style="width: 10%;">
+        <col style="width: 5%;">
+        <col style="width: 10%;">
+        <col style="width: 10%;">
+        <col style="width: 10%;">
+      </colgroup>
       <thead>
         <tr>
           <th>名稱</th>
@@ -648,12 +656,12 @@ async function renderTab2(root){
     </table>`;
   root.append(wrap, form, mechHint, list);
 
-  // ===== 內部狀態 =====
+  // ===== 狀態 =====
   let CUR_SERVER = null;
   let SERVERS = [];
-  let CUR_FILTER = ''; // ★ 目前型別篩選（'' = 全部）
+  let CUR_FILTER = '';
 
-  // ===== 輔助：切換機制欄顯示 =====
+  // 機制欄顯示切換
   function toggleCreateMechanicFields(){
     const on = isGameLike(f_type.value);
     f_mech_label.style.display = on ? '' : 'none';
@@ -663,7 +671,7 @@ async function renderTab2(root){
   f_type.addEventListener('change', toggleCreateMechanicFields);
   toggleCreateMechanicFields();
 
-  // ===== 載入伺服器清單 =====
+  // ===== 載入伺服器清單（含記憶） =====
   async function loadServers(){
     const { data, error } = await adminClient
       .from('discord_servers')
@@ -671,8 +679,17 @@ async function renderTab2(root){
       .order('server_name', {ascending:true});
     SERVERS = data || [];
 
-    // 建立下拉
     srvSel.innerHTML = '';
+    if (error){
+      const opt = document.createElement('option');
+      opt.value = ''; opt.textContent = '讀取伺服器失敗';
+      srvSel.appendChild(opt);
+      CUR_SERVER = null;
+      srvInfo.textContent = '';
+      addBtn.disabled = true;
+      renderAreas([]);
+      return;
+    }
     if (!SERVERS.length){
       const opt = document.createElement('option');
       opt.value = ''; opt.textContent = '（尚無伺服器，先到 Discord /ping 註冊）';
@@ -683,16 +700,23 @@ async function renderTab2(root){
       renderAreas([]);
       return;
     }
+
+    // 讀上次選擇
+    const saved = PREF.get(KEY_SERVER);
+    CUR_SERVER = SERVERS.find(s=>s.server_id===saved)?.server_id || CUR_SERVER || SERVERS[0].server_id;
+
     SERVERS.forEach(s=>{
       const opt = document.createElement('option');
       opt.value = s.server_id;
       opt.textContent = `${s.server_name} (${s.server_id})${s.is_active ? '' : ' [停用]'}`;
       srvSel.appendChild(opt);
     });
-    if (!CUR_SERVER || !SERVERS.find(s=>s.server_id===CUR_SERVER)){
+
+    if (!SERVERS.find(s=>s.server_id===CUR_SERVER)){
       CUR_SERVER = SERVERS[0].server_id;
     }
     srvSel.value = CUR_SERVER;
+
     const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
     srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
     addBtn.disabled = !CUR_SERVER;
@@ -702,23 +726,24 @@ async function renderTab2(root){
     await loadAreas();
   }
 
+  // 記住切換
   srvSel.addEventListener('change', async ()=>{
     CUR_SERVER = srvSel.value || null;
+    if (CUR_SERVER) PREF.set(KEY_SERVER, CUR_SERVER);
     const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
     srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
     addBtn.disabled = !CUR_SERVER;
-    await loadAreas(); // 會吃 CUR_FILTER
+    await loadAreas();
   });
-
   srvReload.addEventListener('click', loadServers);
 
-  // ★ 型別篩選切換 → 只顯示該型別
+  // 型別篩選切換
   typeFilter.addEventListener('change', async ()=>{
     CUR_FILTER = typeFilter.value || '';
     await loadAreas();
   });
 
-  // ===== 新增地區（會寫入 server_id） =====
+  // ===== 新增地區 =====
   addBtn.addEventListener('click', async () => {
     if (!CUR_SERVER){ alert('請先選擇伺服器'); return; }
     addBtn.disabled = true;
@@ -742,16 +767,14 @@ async function renderTab2(root){
     if (error){
       alert('新增失敗：' + (error.message||'')); return;
     }
-    // 清空表單
     f_name.value=''; f_chan.value=''; f_thread.value=''; f_hook.value=''; f_limit.value='';
     f_mech_label.value=''; f_mech_code.value='';
-    // ★ 重新載入並維持目前型別篩選
     await loadAreas();
   });
 
   // ===== 讀取 & 繪製地區（限定伺服器 + 型別篩選） =====
   async function loadAreas(){
-    const tb = $('#areasBody'); tb.innerHTML='';
+    const tb = document.getElementById('areasBody'); tb.innerHTML='';
     if (!CUR_SERVER) return;
 
     let q = adminClient
@@ -759,8 +782,6 @@ async function renderTab2(root){
       .select('*')
       .eq('server_id', CUR_SERVER)
       .order('area_name',{ascending:true});
-
-    // ★ 套用型別篩選
     if (CUR_FILTER) q = q.eq('area_type', CUR_FILTER);
 
     const { data, error } = await q;
@@ -772,7 +793,7 @@ async function renderTab2(root){
   }
 
   function renderAreas(rows){
-    const tb = $('#areasBody'); tb.innerHTML='';
+    const tb = document.getElementById('areasBody'); tb.innerHTML='';
     rows.forEach(r=>tb.appendChild(areaRow(r)));
   }
 
@@ -785,12 +806,10 @@ async function renderTab2(root){
       if(v===r.area_type) o.selected=true; 
       type.appendChild(o); 
     });
-
     const chan = el('input',{type:'text', value:r.dc_channel_id||''});
     const thrd = el('input',{type:'text', value:r.dc_thread_id||''});
     const hook = el('input',{type:'text', value:r.webhook_url||''});
     const lim  = el('input',{type:'number', value: r.daily_limit==null?'':r.daily_limit});
-
     const mechLabel = el('input',{type:'text', value: r.mechanic_label || ''});
     const mechCode  = el('input',{type:'text', value: r.mechanic_code  || ''});
 
@@ -818,7 +837,7 @@ async function renderTab2(root){
     toggleRowMechanic();
     type.addEventListener('change', toggleRowMechanic);
 
-    // 儲存（★ 儲存後重新載入，維持篩選）
+    // 儲存
     save.addEventListener('click', async ()=>{
       save.disabled=true;
       const body = {
@@ -838,12 +857,11 @@ async function renderTab2(root){
       const { error } = await adminClient.from('area').update(body).eq('area_id', r.area_id);
       save.disabled=false;
       if(!error){
-        // 若型別被改到不符合目前篩選，重新載入後該列會自動消失
         await loadAreas();
       }
     });
 
-    // 刪除（★ 刪除後重新載入，維持篩選）
+    // 刪除
     del.addEventListener('click', async ()=>{
       if (!confirm('確定刪除？')) return;
       const { error } = await adminClient.from('area').delete().eq('area_id', r.area_id);
@@ -2116,11 +2134,19 @@ async function renderTab7(root){
   syncByItem();
   refreshWalletAndTx();
 }
-
 // ------------------------
-// TAP8：場景介紹（map_locations）
+// TAP8：場景介紹（map_locations）— 支援多伺服器 + 記住伺服器
+// 依賴：adminClient, el, fmtTime
 // ------------------------
 async function renderTab8(root){
+  // 偏好（沿用全域或就地建立）
+  const PREF = window.__PREF__ || (window.__PREF__ = {
+    get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+    set(k,v){ try { localStorage.setItem(k, v); } catch {} },
+    del(k){ try { localStorage.removeItem(k); } catch {} }
+  });
+  const KEY_SERVER = window.__KEY_SERVER__ || (window.__KEY_SERVER__ = 'pref.server_id');
+
   // ====== 小工具（本 Tab 專用） ======
   function toast(msg, kind='ok', ms=1200){
     let box = document.getElementById('toast-wrap');
@@ -2218,10 +2244,8 @@ async function renderTab8(root){
     const m = ensureMapImgModal();
     m.input.value = row.image_url || '';
     m.msg.textContent = '';
-    // 預覽
     if (row.image_url){ m.preview.src = row.image_url; m.preview.style.display='block'; m.empty.style.display='none'; }
     else { m.preview.removeAttribute('src'); m.preview.style.display='none'; m.empty.style.display='block'; }
-    // 綁一次確定
     if (m._handler) m.saveBtn.removeEventListener('click', m._handler);
     m._handler = async ()=>{
       m.saveBtn.disabled = true; m.msg.textContent = '儲存中…';
@@ -2277,7 +2301,7 @@ async function renderTab8(root){
     btnAdd
   );
 
-  // 一覽表（保留你的 6 欄 colgroup，另外加第 7 欄「操作」）
+  // 一覽表
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   const table = document.createElement('table');
   table.innerHTML = `
@@ -2303,10 +2327,10 @@ async function renderTab8(root){
   // ====== 狀態 ======
   let SERVERS = [];
   let CUR_SERVER = null;
-  let ALL_ROWS = [];    // 目前伺服器下的全部資料
-  let CUR_Q = '';       // 目前分類搜尋關鍵字（小寫）
+  let ALL_ROWS = [];
+  let CUR_Q = '';
 
-  // ====== 載入伺服器 ======
+  // ====== 載入伺服器（含記憶） ======
   async function loadServers(){
     const { data, error } = await adminClient
       .from('discord_servers')
@@ -2315,19 +2339,31 @@ async function renderTab8(root){
     SERVERS = data || [];
 
     srvSel.innerHTML = '';
+    if (error){
+      srvSel.appendChild(el('option',{value:'', text:'讀取伺服器失敗'}));
+      CUR_SERVER = null; srvInfo.textContent=''; btnAdd.disabled=true;
+      renderRows([]); return;
+    }
     if (!SERVERS.length){
       srvSel.appendChild(el('option',{value:'', text:'（尚無伺服器，先在 Discord /ping 註冊）'}));
       CUR_SERVER = null; srvInfo.textContent=''; btnAdd.disabled=true;
       renderRows([]); return;
     }
+
+    // 讀上次選擇
+    const saved = PREF.get(KEY_SERVER);
+    CUR_SERVER = SERVERS.find(s=>s.server_id===saved)?.server_id || CUR_SERVER || SERVERS[0].server_id;
+
     SERVERS.forEach(s=>{
       const opt = el('option',{value:s.server_id, text:`${s.server_name} (${s.server_id})${s.is_active?'':' [停用]'}`});
       srvSel.appendChild(opt);
     });
-    if (!CUR_SERVER || !SERVERS.find(s=>s.server_id===CUR_SERVER)){
+
+    if (!SERVERS.find(s=>s.server_id===CUR_SERVER)){
       CUR_SERVER = SERVERS[0].server_id;
     }
     srvSel.value = CUR_SERVER;
+
     const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
     srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
     btnAdd.disabled = !CUR_SERVER;
@@ -2336,6 +2372,7 @@ async function renderTab8(root){
   }
   srvSel.addEventListener('change', async ()=>{
     CUR_SERVER = srvSel.value || null;
+    if (CUR_SERVER) PREF.set(KEY_SERVER, CUR_SERVER); // 記住
     const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
     srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
     btnAdd.disabled = !CUR_SERVER;
@@ -2353,19 +2390,20 @@ async function renderTab8(root){
       .eq('server_id', CUR_SERVER)
       .order('category',{ascending:true})
       .order('area_name',{ascending:true});
+    if (error){ ALL_ROWS=[]; tb.innerHTML = `<tr><td colspan="7" class="err">${error.message}</td></tr>`; return; }
     ALL_ROWS = data || [];
     renderRows(ALL_ROWS);
     applyFilter();
   }
 
-  // ====== 渲染（不刷新時會個別處理） ======
+  // ====== 渲染 ======
   function renderRows(rows){
     const tb = document.getElementById('mapBody');
     tb.innerHTML = '';
     rows.forEach(r => tb.appendChild(row(r)));
   }
 
-  // ====== 單列（同列包含「儲存 / 刪除」） ======
+  // ====== 單列 ======
   function row(r){
     const tr = document.createElement('tr');
     tr.dataset.id = r.id;
@@ -2475,7 +2513,6 @@ async function renderTab8(root){
         description:   f_desc.value || null,
         image_url:     null
       };
-      // 取回新列（為了拿 id）
       const { data, error } = await adminClient
         .from('map_locations')
         .insert(body)
@@ -2483,7 +2520,6 @@ async function renderTab8(root){
         .single();
       if (error) throw error;
 
-      // 放進快取 & DOM
       ALL_ROWS.push(data);
       const matches = !CUR_Q || String(data.category||'').toLowerCase().includes(CUR_Q);
       const tb = document.getElementById('mapBody');
@@ -2491,7 +2527,6 @@ async function renderTab8(root){
       tr.style.display = matches ? '' : 'none';
       tb.appendChild(tr);
 
-      // 清表單（保留分類，方便連續新增同一分類）
       f_name.value=''; f_chan.value=''; f_thrd.value=''; f_desc.value='';
       toast('已新增','ok');
     }catch(e){
@@ -2523,7 +2558,6 @@ async function renderTab8(root){
   // 初始
   await loadServers();
 }
-
 
 
     
