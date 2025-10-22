@@ -190,6 +190,16 @@
     };
     const fmtTime = (s)=> s? new Date(s).toLocaleString('zh-TW', { timeZone:'Asia/Taipei' }) : '-';
 
+    // ===== 偏好（localStorage）=====
+const PREF = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k,v){ try { localStorage.setItem(k, v); } catch {} },
+  del(k){ try { localStorage.removeItem(k); } catch {} }
+};
+// 統一一個「全站共用」伺服器偏好鍵
+const KEY_SERVER = 'pref.server_id';
+
+
 
 // ===== 全域 Toast（一次性） =====
 function ensureToastBox(){
@@ -1236,42 +1246,42 @@ async function renderTab4(root){
 // - 選幣別 → 選該幣別商品 → 輸入庫存 → 儲存（upsert special_shop_stock）
 // - 下方列表只顯示「當前選取地區」的上架商品，可即時改庫存或刪除該品項
 // ------------------------
+// 若尚未定義偏好工具，這兩行放在檔案任何 <script> 位置都可
+window.PREF = window.PREF || { get(k){try{return localStorage.getItem(k)}catch{return null}}, set(k,v){try{localStorage.setItem(k,v)}catch{}}, del(k){try{localStorage.removeItem(k)}catch{}} };
+window.KEY_SERVER = window.KEY_SERVER || 'pref.server_id';
+
+// ------------------------
+// TAP4SPSHOP：其他商店（SPSHOP 分店庫存管理）完整版本
+// ------------------------
 async function renderTab4Spshop(root){
   // 讀所有商品（拿來依幣別篩選）
-  const ALL_ITEMS = await loadShopItems(); // [{item_name, price_type, price, stock}, ...]
+  const ALL_ITEMS = await loadShopItems(); // [{item_name, price_type, price, stock}]
   const itemByName = new Map(ALL_ITEMS.map(i => [i.item_name, i]));
 
-  // 抓已設定 spshop 的地區
-  const { data: AREAS, error: aErr } = await adminClient
-    .from('area')
-    .select('area_id, area_name')
-    .eq('area_type','特製')
-    .eq('mechanic_code','spshop')
-    .order('area_name',{ascending:true});
-
+  // 外框與標題
   const wrap = el('div',{class:'card'});
   wrap.append(el('div',{class:'row'},[
     el('strong',{text:'其他商店（SPSHOP 分店庫存）'}),
     el('span',{class:'chip',text:'special_shop_stock'})
   ]));
 
+  // === 伺服器列（新增） ===
+  const srvBar = el('div', {class:'toolbar'});
+  const srvSel = document.createElement('select');
+  const srvReload = el('button', {class:'btn secondary small'}, [document.createTextNode('重載伺服器')]);
+  const srvInfo = el('span', {class:'muted'});
+  srvBar.append(el('strong',{text:'伺服器'}), srvSel, srvReload, srvInfo);
+  wrap.append(srvBar);
+
   // ---- 表頭控件：地區 + 幣別 + 商品 + 庫存 + 儲存
   const form = el('div',{class:'grid grid-4'});
 
-  const f_area = document.createElement('select');
-  if (!AREAS || AREAS.length===0){
-    const o = document.createElement('option');
-    o.value=''; o.textContent='（尚無 SPSHOP 地區，請先到「地區表」建立 特製＋mechanic_code=spshop）';
-    f_area.appendChild(o);
-  }else{
-    AREAS.forEach(a => f_area.appendChild(el('option',{value:a.area_id, text:a.area_name})));
-  }
-
-  const f_curr = document.createElement('select');
+  const f_area = document.createElement('select');               // 分店（依伺服器變動）
+  const f_curr = document.createElement('select');               // 幣別
   f_curr.appendChild(el('option',{value:'', text:'（選幣別）'}));
   CURRENCIES.forEach(v => f_curr.appendChild(el('option',{value:v, text:v})));
 
-  const f_item = document.createElement('select');
+  const f_item = document.createElement('select');               // 商品（依幣別變動）
   f_item.appendChild(el('option',{value:'', text:'（先選幣別）'}));
 
   const f_stock = el('input',{type:'number', placeholder:'庫存（0=售罄）', min:0});
@@ -1287,19 +1297,18 @@ async function renderTab4Spshop(root){
   );
   wrap.append(form, msg);
 
-  // ---- 列表：只顯示目前分店的上架商品
+  // ---- 列表
   const list = el('div',{class:'table-wrap', style:'margin-top:10px'});
   list.innerHTML = `
-
     <table>
-  <colgroup>
-      <col style="width: 20%;">
-      <col style="width: 10%;">
-      <col style="width: 5%;">
-      <col style="width: 9%;">
-      <col style="width: 15%;">
-      <col style="width: 7%;">
-    </colgroup>
+      <colgroup>
+        <col style="width: 20%;">
+        <col style="width: 10%;">
+        <col style="width: 5%;">
+        <col style="width: 9%;">
+        <col style="width: 15%;">
+        <col style="width: 7%;">
+      </colgroup>
       <thead>
         <tr>
           <th>商品名稱</th>
@@ -1314,7 +1323,96 @@ async function renderTab4Spshop(root){
     </table>`;
   root.append(wrap, list);
 
-  // ---- 幫助函式
+  // ===== 狀態 =====
+  let SERVERS = [];
+  let CUR_SERVER = null;
+
+  // === 伺服器清單 ===
+  async function loadServers(){
+    const { data, error } = await adminClient
+      .from('discord_servers')
+      .select('server_id, server_name, is_active')
+      .order('server_name',{ascending:true});
+    if (error) { console.warn('[servers]', error); }
+
+    SERVERS = data || [];
+    srvSel.innerHTML = '';
+
+    if (!SERVERS.length){
+      srvSel.appendChild(el('option',{value:'', text:'（尚無伺服器，先到 Discord /ping 註冊）'}));
+      CUR_SERVER = null;
+      srvInfo.textContent = '';
+      form.style.display = 'none';
+      renderAreaOptions([]);
+      renderEmptyTable();
+      return;
+    }
+
+    // 還原上次選擇（共用 key）
+    const saved = PREF.get(KEY_SERVER);
+    CUR_SERVER = SERVERS.find(s => s.server_id === saved)?.server_id || SERVERS[0].server_id;
+
+    SERVERS.forEach(s=>{
+      srvSel.appendChild(el('option',{
+        value:s.server_id,
+        text:`${s.server_name} (${s.server_id})${s.is_active?'':' [停用]'}`
+      }));
+    });
+    srvSel.value = CUR_SERVER;
+
+    const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
+    srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
+
+    form.style.display='';
+    await reloadAreasForServer();     // 載入該伺服器的 SPSHOP 地區
+    await loadAreaStockList();        // 載入該伺服器當前分店的上架列表
+  }
+
+  srvSel.addEventListener('change', async ()=>{
+    CUR_SERVER = srvSel.value || null;
+    if (CUR_SERVER) PREF.set(KEY_SERVER, CUR_SERVER); // 記住伺服器
+    const cur = SERVERS.find(s=>s.server_id===CUR_SERVER);
+    srvInfo.textContent = cur ? `目前伺服器：${cur.server_name}` : '';
+    await reloadAreasForServer();
+    await loadAreaStockList();
+  });
+
+  srvReload.addEventListener('click', loadServers);
+
+  // === 依伺服器載入「SPSHOP 分店」 ===
+  async function reloadAreasForServer(){
+    if (!CUR_SERVER){
+      renderAreaOptions([]);
+      return;
+    }
+    const { data, error } = await adminClient
+      .from('area')
+      .select('area_id, area_name')
+      .eq('server_id', CUR_SERVER)             // 只抓當前伺服器
+      .eq('area_type','特製')
+      .eq('mechanic_code','spshop')
+      .order('area_name',{ascending:true});
+    if (error) { console.warn('[areas]', error); }
+    renderAreaOptions(data || []);
+  }
+
+  function renderAreaOptions(AREAS){
+    f_area.innerHTML = '';
+    if (!AREAS.length){
+      f_area.appendChild(el('option',{value:'', text:'（此伺服器尚無 SPSHOP 地區）'}));
+      f_area.disabled = true;
+    }else{
+      AREAS.forEach(a => f_area.appendChild(el('option',{value:a.area_id, text:a.area_name})));
+      f_area.disabled = false;
+    }
+  }
+
+  function renderEmptyTable(){
+    const tb = document.getElementById('spshopBody');
+    tb.innerHTML = `<tr><td colspan="6" class="muted">請先選擇伺服器。</td></tr>`;
+  }
+
+  // === 幣別→商品選單 ===
   function fillItemsByCurrency(){
     const cat = f_curr.value;
     f_item.innerHTML = '';
@@ -1332,8 +1430,8 @@ async function renderTab4Spshop(root){
       });
   }
 
+  // === 根據目前選擇帶出庫存 ===
   async function preloadStockForSelection(){
-    // 選了地區 + 商品 → 查是否已上架，若有就帶出庫存
     const areaId = f_area.value, itemName = f_item.value;
     if (!areaId || !itemName){ f_stock.value=''; return; }
     const { data } = await adminClient
@@ -1345,93 +1443,92 @@ async function renderTab4Spshop(root){
     f_stock.value = data?.stock ?? '';
   }
 
+  // === 載入當前分店的上架列表（支援幣別篩選） ===
   async function loadAreaStockList(){
-  const tb = document.getElementById('spshopBody'); 
-  tb.innerHTML='';
-  const areaId = f_area.value;
-  if (!areaId){ 
-    tb.innerHTML = `<tr><td colspan="6" class="muted">請先選擇分店。</td></tr>`;
-    return;
-  }
+    const tb = document.getElementById('spshopBody'); 
+    tb.innerHTML='';
+    const areaId = f_area.value;
+    if (!areaId){ 
+      tb.innerHTML = `<tr><td colspan="6" class="muted">請先選擇分店。</td></tr>`;
+      return;
+    }
 
-  // 讀該分店已上架的商品（JOIN shop_items 拿幣別與單價）
-  const { data, error } = await adminClient
-    .from('special_shop_stock')
-    .select(`item_name, stock, updated_at, shop_items(price, price_type)`)
-    .eq('area_id', areaId)
-    .order('item_name',{ascending:true});
+    // 讀該分店已上架的商品（JOIN shop_items 拿幣別與單價）
+    const { data, error } = await adminClient
+      .from('special_shop_stock')
+      .select(`item_name, stock, updated_at, shop_items(price, price_type)`)
+      .eq('area_id', areaId)
+      .order('item_name',{ascending:true});
 
-  if (error){
-    tb.innerHTML = `<tr><td colspan="6" class="err">${error.message}</td></tr>`;
-    return;
-  }
+    if (error){
+      tb.innerHTML = `<tr><td colspan="6" class="err">${error.message}</td></tr>`;
+      return;
+    }
 
-  // ← 這裡新增幣別篩選（有選幣別就只顯示該幣別）
-  const cat = f_curr.value; // '' 代表不篩選
-  const rows = (data || []).filter(r => {
-    if (!cat) return true;
-    const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? null);
-    return priceType === cat;
-  });
-
-  if (!rows.length){
-    tb.innerHTML = `<tr><td colspan="6" class="muted">沒有符合的商品${cat ? `（已套用幣別：${cat}）` : ''}。</td></tr>`;
-    return;
-  }
-
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
-    const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? '-');
-    const price     = r.shop_items?.price ?? (itemByName.get(r.item_name)?.price ?? '-');
-
-    const stockInput = el('input',{type:'number', min:0, value:String(r.stock)});
-    stockInput.style.width = '110px';
-
-    const btnUpdate = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
-    const btnDel    = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
-
-    tr.innerHTML = `
-      <td>${r.item_name}</td>
-      <td>${priceType}</td>
-      <td class="mono">${price}</td>
-    `;
-    const tdStock = document.createElement('td'); tdStock.appendChild(stockInput);
-    const tdTime  = document.createElement('td'); tdTime.textContent = fmtTime(r.updated_at);
-    const tdBtn   = document.createElement('td'); tdBtn.append(btnUpdate, ' ', btnDel);
-    tr.appendChild(tdStock); tr.appendChild(tdTime); tr.appendChild(tdBtn);
-    tb.appendChild(tr);
-
-    btnUpdate.addEventListener('click', async ()=>{
-      btnUpdate.disabled=true;
-      const newStock = Math.max(0, Number(stockInput.value||0));
-      const { error } = await adminClient
-        .from('special_shop_stock')
-        .update({ stock: newStock })
-        .eq('area_id', areaId)
-        .eq('item_name', r.item_name);
-      btnUpdate.disabled=false;
-      if (!error){ btnUpdate.textContent='已儲存'; setTimeout(()=>btnUpdate.textContent='儲存', 900); loadAreaStockList(); }
+    const cat = f_curr.value; // 幣別篩選（可空）
+    const rows = (data || []).filter(r => {
+      if (!cat) return true;
+      const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? null);
+      return priceType === cat;
     });
 
-    btnDel.addEventListener('click', async ()=>{
-      if (!confirm(`刪除上架「${r.item_name}」？`)) return;
-      const { error } = await adminClient
-        .from('special_shop_stock')
-        .delete()
-        .eq('area_id', areaId)
-        .eq('item_name', r.item_name);
-      if (!error) tr.remove();
+    if (!rows.length){
+      tb.innerHTML = `<tr><td colspan="6" class="muted">沒有符合的商品${cat ? `（已套用幣別：${cat}）` : ''}。</td></tr>`;
+      return;
+    }
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      const priceType = r.shop_items?.price_type || (itemByName.get(r.item_name)?.price_type ?? '-');
+      const price     = r.shop_items?.price ?? (itemByName.get(r.item_name)?.price ?? '-');
+
+      const stockInput = el('input',{type:'number', min:0, value:String(r.stock)});
+      stockInput.style.width = '110px';
+
+      const btnUpdate = el('button',{class:'btn small'},[document.createTextNode('儲存')]);
+      const btnDel    = el('button',{class:'btn secondary small'},[document.createTextNode('刪除')]);
+
+      tr.innerHTML = `
+        <td>${r.item_name}</td>
+        <td>${priceType}</td>
+        <td class="mono">${price}</td>
+      `;
+      const tdStock = document.createElement('td'); tdStock.appendChild(stockInput);
+      const tdTime  = document.createElement('td'); tdTime.textContent = fmtTime(r.updated_at);
+      const tdBtn   = document.createElement('td'); tdBtn.append(btnUpdate, ' ', btnDel);
+      tr.appendChild(tdStock); tr.appendChild(tdTime); tr.appendChild(tdBtn);
+      tb.appendChild(tr);
+
+      btnUpdate.addEventListener('click', async ()=>{
+        btnUpdate.disabled=true;
+        const newStock = Math.max(0, Number(stockInput.value||0));
+        const { error } = await adminClient
+          .from('special_shop_stock')
+          .update({ stock: newStock })
+          .eq('area_id', areaId)
+          .eq('item_name', r.item_name);
+        btnUpdate.disabled=false;
+        if (!error){ btnUpdate.textContent='已儲存'; setTimeout(()=>btnUpdate.textContent='儲存', 900); loadAreaStockList(); }
+      });
+
+      btnDel.addEventListener('click', async ()=>{
+        if (!confirm(`刪除上架「${r.item_name}」？`)) return;
+        const { error } = await adminClient
+          .from('special_shop_stock')
+          .delete()
+          .eq('area_id', areaId)
+          .eq('item_name', r.item_name);
+        if (!error) tr.remove();
+      });
     });
+  }
+
+  // 事件
+  f_curr.addEventListener('change', ()=>{ 
+    fillItemsByCurrency(); 
+    f_stock.value=''; 
+    loadAreaStockList();   // 幣別切換時刷新下方列表
   });
-}
-
-
-  // ---- 事件
-f_curr.addEventListener('change', ()=>{ 
-  fillItemsByCurrency(); 
-  f_stock.value=''; 
-  loadAreaStockList();   // ← 幣別切換時也刷新下方列表
-});
   f_item.addEventListener('change', preloadStockForSelection);
   f_area.addEventListener('change', ()=>{ preloadStockForSelection(); loadAreaStockList(); });
 
@@ -1443,9 +1540,10 @@ f_curr.addEventListener('change', ()=>{
       const item   = f_item.value;
       const stockV = Number(f_stock.value || 0);
 
-      if (!areaId) throw new Error('請先選擇分店地區');
-      if (!curr)   throw new Error('請先選擇幣別');
-      if (!item)   throw new Error('請選擇商品');
+      if (!CUR_SERVER) throw new Error('請先選擇伺服器');
+      if (!areaId)    throw new Error('請先選擇分店地區');
+      if (!curr)      throw new Error('請先選擇幣別');
+      if (!item)      throw new Error('請選擇商品');
       if (!Number.isFinite(stockV) || stockV < 0) throw new Error('庫存需為 0 或正整數');
 
       // upsert: (area_id, item_name) 唯一鍵
@@ -1465,166 +1563,11 @@ f_curr.addEventListener('change', ()=>{
     }
   });
 
-  // ---- 初始
-  fillItemsByCurrency();
-  if (AREAS && AREAS.length){
-    f_area.value = AREAS[0].area_id;
-    await loadAreaStockList();
-  }
-}
-// ===== TAP：贈送道具（依幣別→選道具→選學生；數量可負=回收）=====
-async function renderTab4Gift(root){
-  await loadStudentNames(); // 用你既有的學生下拉
-
-  // 先把所有商品抓一次；之後用幣別篩選
-  let ALL_ITEMS = await loadShopItems(); // [{item_name, price_type, price, stock}...]
-
-  const wrap = el('div',{class:'card'});
-  wrap.append(el('div',{class:'row'},[
-    el('strong',{text:'贈送道具'}),
-    el('span',{class:'chip',text:'inventory & transaction_log'})
-  ]));
-
-  // 表單
-  const form = el('div',{class:'grid grid-4'});
-
-  // 1) 幣別分類
-  const f_curr = document.createElement('select');
-  f_curr.appendChild(el('option',{value:'', text:'（先選幣別）'}));
-  CURRENCIES.forEach(v=> f_curr.appendChild(el('option',{value:v, text:v})));
-
-  // 2) 道具（依幣別動態填入）
-  const f_item = document.createElement('select');
-  f_item.appendChild(el('option',{value:'', text:'（請先選幣別）'}));
-
-  // 3) 對象（學生）
-  const f_student = makeStudentSelect();
-
-  // 4) 數量（可負值=回收）
-  const f_qty = el('input',{type:'number', step:'1', placeholder:'數量（可負值=回收）'});
-  f_qty.value = 1;
-
-  // 顯示持有量
-  const ownedBox = el('div',{class:'help', text:'持有數量：-'});
-
-  // 送出
-  const btn = el('button',{class:'btn'},[document.createTextNode('確認')]);
-  const msg = el('span',{class:'muted'});
-
-  form.append(
-    el('div',{},[el('strong',{text:'幣別'}), f_curr]),
-    el('div',{},[el('strong',{text:'道具'}), f_item]),
-    el('div',{},[el('strong',{text:'對象'}), f_student]),
-    el('div',{},[el('strong',{text:'數量（可負）'}), f_qty]),
-    btn
-  );
-  wrap.append(form, ownedBox, msg);
-  root.append(wrap);
-
-  // 幫助函式：依幣別填入道具清單
-  function fillItemsByCurrency(){
-    const cat = f_curr.value;
-    f_item.innerHTML = '';
-    if (!cat){
-      f_item.appendChild(el('option',{value:'', text:'（請先選幣別）'}));
-      return;
-    }
-    f_item.appendChild(el('option',{value:'', text:'（選擇道具）'}));
-    ALL_ITEMS
-      .filter(i => i.price_type === cat)
-      .sort((a,b)=> a.item_name.localeCompare(b.item_name,'zh-Hant'))
-      .forEach(i => f_item.appendChild(el('option',{value:i.item_name, text:i.item_name})));
-  }
-
-  // 讀取學生持有量
-  async function refreshOwned(){
-    const student = f_student.value;
-    const item = f_item.value;
-    if (!student || !item){ ownedBox.textContent = '持有數量：-'; return; }
-    const { data, error } = await adminClient
-      .from('inventory')
-      .select('id, amount')
-      .eq('student_name', student)
-      .eq('item_name', item)
-      .maybeSingle();
-    const amt = data?.amount ?? 0;
-    ownedBox.textContent = `持有數量：${amt}`;
-  }
-
-  // 送出邏輯（這段才是你原本壞掉的地方，下面補齊 try/catch/finally）
-  btn.addEventListener('click', async ()=>{
-    btn.disabled = true; msg.textContent = '處理中…';
-    try{
-      const curr    = f_curr.value;
-      const item    = f_item.value;
-      const student = f_student.value;
-      const qty     = Number(f_qty.value || 0);
-
-      if (!curr)    throw new Error('請先選幣別');
-      if (!item)    throw new Error('請選擇道具');
-      if (!student) throw new Error('請選擇對象');
-      if (!Number.isFinite(qty) || qty === 0) throw new Error('數量不可為 0');
-
-      // 先查目前持有量
-      const { data: row, error: qErr } = await adminClient
-        .from('inventory')
-        .select('id, amount')
-        .eq('student_name', student)
-        .eq('item_name', item)
-        .maybeSingle();
-      if (qErr) throw qErr;
-
-      const curAmt = row?.amount ?? 0;
-      const newAmt = curAmt + qty;
-
-      // 不允許變成負數
-      if (newAmt < 0){
-        throw new Error(`持有不足，最多可回收 ${curAmt}。`);
-      }
-
-      // 寫入 inventory
-      if (row){ // 原本有
-        if (newAmt === 0){
-          const { error } = await adminClient
-            .from('inventory')
-            .delete()
-            .eq('id', row.id);
-          if (error) throw error;
-        }else{
-          const { error } = await adminClient
-            .from('inventory')
-            .update({ amount: newAmt })
-            .eq('id', row.id);
-          if (error) throw error;
-        }
-      }else{ // 原本沒有 → 只能是贈送（qty>0）
-        if (qty < 0) throw new Error('該角色尚未持有此道具，無法回收。');
-        const { error } = await adminClient
-          .from('inventory')
-          .insert({ student_name: student, item_name: item, amount: qty });
-        if (error) throw error;
-      }
-
-     
-
-      msg.textContent = '已送出！';
-      await refreshOwned(); // 重新查詢持有量
-    } catch(e){
-      msg.textContent = '失敗：'+(e.message||e);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // 綁定事件
-  f_curr.addEventListener('change', ()=>{ fillItemsByCurrency(); refreshOwned(); });
-  f_item.addEventListener('change', refreshOwned);
-  f_student.addEventListener('change', refreshOwned);
-
   // 初始
   fillItemsByCurrency();
-  refreshOwned();
+  await loadServers();   // 啟動點：載伺服器→分店→列表
 }
+
 
 
    // ------------------------
