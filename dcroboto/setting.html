@@ -424,153 +424,266 @@ const EARN_KIND = {
     }
 
     // ------------------------
-    // TAP1：學生快取（僅瀏覽）+ 玩家綁定（設定 DCID/is_admin）
-    // ------------------------
-    async function renderTab1(root){
-      const bar = el('div', {class:'toolbar'});
-      const syncBtn = el('button', {class:'btn'}, [document.createTextNode('↻ 從 A 專案同步：玩家 + 過審角色')]);
-      const msg = el('span', {class:'muted'});
-      bar.append(syncBtn, msg);
+   // ------------------------
+// TAP1：學生快取（僅瀏覽）+ 玩家綁定（設定 DCID/is_admin）
+// ------------------------
+async function renderTab1(root){
+  const bar = el('div', {class:'toolbar'});
+  const syncBtn = el('button', {class:'btn'}, [document.createTextNode('↻ 從 A 專案同步：玩家 + 過審角色')]);
+  const msg = el('span', {class:'muted'});
+  bar.append(syncBtn, msg);
 
-      // 左：學生快取
-      const left = el('div', {class:'card grow'});
-      left.append(el('div', {class:'row'}, [el('strong', {text:'學生快取（只讀）'}), el('span', {class:'chip', text:'student_cache'})] ));
-      const leftTableWrap = el('div', {class:'table-wrap'});
-      const leftTable = el('table');
-      leftTable.innerHTML = `
-      <colgroup>
+  // 左：學生快取
+  const left = el('div', {class:'card grow'});
+  left.append(el('div', {class:'row'}, [
+    el('strong', {text:'學生快取（只讀）'}),
+    el('span', {class:'chip', text:'student_cache'})
+  ]));
+
+  const leftTableWrap = el('div', {class:'table-wrap'});
+  const leftTable = el('table');
+  leftTable.innerHTML = `
+    <colgroup>
       <col style="width: 10%;">
       <col style="width: 15%;">
       <col style="width: 10%;">
       <col style="width: 10%;">
     </colgroup>
-        <thead><tr>
-          <th>student_id</th>
-          <th>student_name</th>
-          <th>player_id</th>
-          <th>更新時間</th>
-        </tr></thead><tbody id="t1-students"></tbody>`;
-      leftTableWrap.append(leftTable); left.append(leftTableWrap);
+    <thead><tr>
+      <th>student_id</th>
+      <th>student_name</th>
+      <th>player_id</th>
+      <th>更新時間</th>
+    </tr></thead>
+    <tbody id="t1-students"></tbody>`;
+  leftTableWrap.append(leftTable);
+  left.append(leftTableWrap);
 
-      // 右：玩家綁定
-      const right = el('div', {class:'card grow'});
-      right.append(el('div', {class:'row'}, [el('strong', {text:'玩家綁定（DCID / 管理員）'}), el('span', {class:'chip', text:'player_links'})] ));
-      const filter = el('input', {type:'text', placeholder:'搜尋玩家名稱/ID…', style:'min-width:200px'});
-      const listBtn = el('button', {class:'btn secondary small'}, [document.createTextNode('重新載入')]);
-      const rightBar = el('div', {class:'toolbar'}); rightBar.append(filter, listBtn);
-      const rightTableWrap = el('div', {class:'table-wrap'});
-      const rightTable = el('table');
-      rightTable.innerHTML = `
-      <colgroup>
+  // 右：玩家綁定
+  const right = el('div', {class:'card grow'});
+  right.append(el('div', {class:'row'}, [
+    el('strong', {text:'玩家綁定（DCID / 管理員）'}),
+    el('span', {class:'chip', text:'player_links'})
+  ]));
+
+  const filter = el('input', {type:'text', placeholder:'搜尋玩家名稱/ID…', style:'min-width:200px'});
+  const listBtn = el('button', {class:'btn secondary small'}, [document.createTextNode('重新載入')]);
+  const rightBar = el('div', {class:'toolbar'});
+  rightBar.append(filter, listBtn);
+
+  const rightTableWrap = el('div', {class:'table-wrap'});
+  const rightTable = el('table');
+  rightTable.innerHTML = `
+    <colgroup>
       <col style="width: 15%;">
       <col style="width: 15%;">
       <col style="width: 15%;">
       <col style="width: 5%;">
       <col style="width: 10%;">
     </colgroup>
-        <thead><tr>
-          <th>player_id</th>
-          <th>玩家名稱</th>
-          <th>DCID</th>
-          <th>管理員</th>
-          <th></th>
-        </tr></thead><tbody id="t1-players"></tbody>`;
-      rightTableWrap.append(rightTable); right.append(rightBar, rightTableWrap);
+    <thead><tr>
+      <th>player_id</th>
+      <th>玩家名稱</th>
+      <th>DCID</th>
+      <th>管理員</th>
+      <th></th>
+    </tr></thead>
+    <tbody id="t1-players"></tbody>`;
+  rightTableWrap.append(rightTable);
+  right.append(rightBar, rightTableWrap);
 
-      const rowWrap = el('div', {class:'row'}); rowWrap.append(left, right);
-      root.append(bar, rowWrap);
+  const rowWrap = el('div', {class:'row'});
+  rowWrap.append(left, right);
+  root.append(bar, rowWrap);
 
-      // 同步：先確保 A 已登入
-      syncBtn.addEventListener('click', async () => {
-        syncBtn.disabled = true; msg.textContent = '檢查 A 專案登入狀態…';
-        const ok = await ensureALogin();
-        if (!ok) { msg.textContent = '已取消（未登入 A 專案）'; syncBtn.disabled = false; return; }
-
-        msg.textContent = '同步中（讀 A → 寫 C）…';
-        try {
-          const players = await fetchAllPlayersFromA();
-          const students = await fetchApprovedStudentsFromA();
-          await upsertPlayersToC(players);
-          await upsertStudentsToC(students);
-          msg.textContent = `同步完成：玩家 ${players.length} 筆、過審角色 ${students.length} 筆。`;
-          loadT1();
-        } catch(e){ console.error(e); msg.textContent = '同步失敗：'+(e.message||e); }
-        finally { syncBtn.disabled = false; }
-      });
-
-      listBtn.addEventListener('click', loadT1);
-      filter.addEventListener('input', () => renderPlayersT1(window.__T1_PLAYERS || [], filter.value));
-
-      async function loadT1(){
-        await Promise.all([loadStudents(), loadPlayers()]);
-      }
-      async function loadStudents(){
-        const { data, error } = await adminClient.from('student_cache').select('*').order('student_name', {ascending:true});
-        const tb = $('#t1-students'); tb.innerHTML = '';
-        if (error) { tb.innerHTML = `<tr><td colspan=4 class="err">讀取錯誤：${error.message}</td></tr>`; return; }
-        (data||[]).forEach(r => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="mono">${r.student_id}</td><td>${r.student_name}</td><td class="mono">${r.player_id}</td><td>${fmtTime(r.updated_at)}</td>`;
-          tb.appendChild(tr);
-        });
-      }
-      async function loadPlayers(){
-        const { data, error } = await adminClient.from('player_links').select('*').order('player_name',{ascending:true});
-        if (error) { renderPlayersT1([], ''); return; }
-        window.__T1_PLAYERS = data||[]; renderPlayersT1(window.__T1_PLAYERS, filter.value);
-      }
-      function renderPlayersT1(rows, q){
-        const tb = $('#t1-players'); tb.innerHTML = '';
-        const kw = (q||'').toLowerCase();
-        rows.filter(r => !kw || (String(r.player_name||'').toLowerCase().includes(kw) || String(r.player_id||'').toLowerCase().includes(kw)))
-            .forEach(r => tb.appendChild(playerRow(r)));
-      }
-      function playerRow(r){
-        const tr = document.createElement('tr');
-        const dc = el('input', {type:'text', value: r.discord_user_id || '', placeholder:'DCID'});
-        const admin = el('input', {type:'checkbox'}); admin.checked = !!r.is_admin;
-        const save = el('button', {class:'btn small'}, [document.createTextNode('儲存')]);
-        const del = el('button', {class:'btn secondary small'}, [document.createTextNode('清空 DCID')]);
-        tr.appendChild(el('td', {class:'mono', text:r.player_id}));
-        tr.appendChild(el('td', {text:r.player_name||'-'}));
-        const tdc = document.createElement('td'); tdc.appendChild(dc); tr.appendChild(tdc);
-        const tadmin = document.createElement('td'); tadmin.appendChild(admin); tr.appendChild(tadmin);
-        const tbtn = document.createElement('td'); tbtn.append(save,' ',del); tr.appendChild(tbtn);
-        save.addEventListener('click', async () => {
-          save.disabled = true;
-          const { error } = await adminClient.from('player_links').update({ discord_user_id: dc.value||null, is_admin: admin.checked }).eq('player_id', r.player_id);
-          save.disabled = false; if (!error) save.textContent='已儲存'; else save.textContent='失敗'; setTimeout(()=>save.textContent='儲存', 1200);
-        });
-        del.addEventListener('click', async () => {
-          dc.value=''; await adminClient.from('player_links').update({ discord_user_id:null }).eq('player_id', r.player_id);
-        });
-        return tr;
-      }
-
-      // A 專案：抓全部玩家/過審角色
-      async function fetchAllPlayersFromA(){
-        const out=[]; let from=0, step=1000; while(true){
-          const { data, error } = await aClient.from('players').select('player_id, username').range(from, from+step-1);
-          if (error) throw error; if (!data || data.length===0) break; out.push(...data); if (data.length<step) break; from+=step;
-        } return out;
-      }
-      async function fetchApprovedStudentsFromA(){
-        const out=[]; let from=0, step=1000; while(true){
-          const { data, error } = await aClient.from('students').select('student_id, name, player_id, student_code').not('student_code','is',null).order('name',{ascending:true}).range(from, from+step-1);
-          if (error) throw error; if (!data || data.length===0) break; out.push(...data); if (data.length<step) break; from+=step;
-        } return out;
-      }
-      async function upsertPlayersToC(rows){
-        if (!rows.length) return; const payload = rows.map(x=>({ player_id: x.player_id, player_name: x.username }));
-        const { error } = await adminClient.from('player_links').upsert(payload, { onConflict:'player_id' }); if (error) throw error;
-      }
-      async function upsertStudentsToC(rows){
-        if (!rows.length) return; const payload = rows.map(x=>({ student_id: x.student_id, student_name: x.name, player_id: x.player_id }));
-        const { error } = await adminClient.from('student_cache').upsert(payload, { onConflict:'student_id' }); if (error) throw error;
-      }
-
-      loadT1();
+  // ==============================
+  // 同步按鈕邏輯（從 A 專案同步）
+  // ==============================
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    msg.textContent = '檢查 A 專案登入狀態…';
+    const ok = await ensureALogin();
+    if (!ok) {
+      msg.textContent = '已取消（未登入 A 專案）';
+      syncBtn.disabled = false;
+      return;
     }
+
+    msg.textContent = '同步中（讀取 A → 寫入 C）…';
+    try {
+      const players = await fetchAllPlayersFromA();
+      const students = await fetchApprovedStudentsFromA(); // ✅ 已內建只取數字學號
+      await upsertPlayersToC(players);
+      await upsertStudentsToC(students);
+
+      msg.textContent = `同步完成：玩家 ${players.length} 筆、過審角色 ${students.length} 筆（僅數字學號）。`;
+      loadT1();
+    } catch (e) {
+      console.error(e);
+      msg.textContent = '同步失敗：' + (e.message || e);
+    } finally {
+      syncBtn.disabled = false;
+    }
+  });
+
+  listBtn.addEventListener('click', loadT1);
+  filter.addEventListener('input', () => renderPlayersT1(window.__T1_PLAYERS || [], filter.value));
+
+  // ==============================
+  // 左右表格載入
+  // ==============================
+  async function loadT1(){
+    await Promise.all([loadStudents(), loadPlayers()]);
+  }
+
+  async function loadStudents(){
+    const { data, error } = await adminClient
+      .from('student_cache')
+      .select('*')
+      .order('student_name', { ascending: true });
+    const tb = $('#t1-students');
+    tb.innerHTML = '';
+    if (error) {
+      tb.innerHTML = `<tr><td colspan=4 class="err">讀取錯誤：${error.message}</td></tr>`;
+      return;
+    }
+    (data || []).forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono">${r.student_id}</td>
+        <td>${r.student_name}</td>
+        <td class="mono">${r.player_id}</td>
+        <td>${fmtTime(r.updated_at)}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+
+  async function loadPlayers(){
+    const { data, error } = await adminClient
+      .from('player_links')
+      .select('*')
+      .order('player_name', { ascending: true });
+    if (error) {
+      renderPlayersT1([], '');
+      return;
+    }
+    window.__T1_PLAYERS = data || [];
+    renderPlayersT1(window.__T1_PLAYERS, filter.value);
+  }
+
+  function renderPlayersT1(rows, q){
+    const tb = $('#t1-players');
+    tb.innerHTML = '';
+    const kw = (q || '').toLowerCase();
+    rows
+      .filter(r =>
+        !kw ||
+        (String(r.player_name || '').toLowerCase().includes(kw) ||
+         String(r.player_id || '').toLowerCase().includes(kw))
+      )
+      .forEach(r => tb.appendChild(playerRow(r)));
+  }
+
+  function playerRow(r){
+    const tr = document.createElement('tr');
+    const dc = el('input', { type:'text', value: r.discord_user_id || '', placeholder:'DCID' });
+    const admin = el('input', { type:'checkbox' });
+    admin.checked = !!r.is_admin;
+    const save = el('button', { class:'btn small' }, [document.createTextNode('儲存')]);
+    const del = el('button', { class:'btn secondary small' }, [document.createTextNode('清空 DCID')]);
+    tr.appendChild(el('td', { class:'mono', text:r.player_id }));
+    tr.appendChild(el('td', { text:r.player_name || '-' }));
+    const tdc = document.createElement('td'); tdc.appendChild(dc); tr.appendChild(tdc);
+    const tadmin = document.createElement('td'); tadmin.appendChild(admin); tr.appendChild(tadmin);
+    const tbtn = document.createElement('td'); tbtn.append(save, ' ', del); tr.appendChild(tbtn);
+
+    save.addEventListener('click', async () => {
+      save.disabled = true;
+      const { error } = await adminClient
+        .from('player_links')
+        .update({ discord_user_id: dc.value || null, is_admin: admin.checked })
+        .eq('player_id', r.player_id);
+      save.disabled = false;
+      save.textContent = !error ? '已儲存' : '失敗';
+      setTimeout(() => save.textContent = '儲存', 1200);
+    });
+
+    del.addEventListener('click', async () => {
+      dc.value = '';
+      await adminClient.from('player_links').update({ discord_user_id: null }).eq('player_id', r.player_id);
+    });
+
+    return tr;
+  }
+
+  // ==============================
+  // A 專案資料抓取邏輯
+  // ==============================
+
+  async function fetchAllPlayersFromA(){
+    const out = [];
+    let from = 0, step = 1000;
+    while (true) {
+      const { data, error } = await aClient
+        .from('players')
+        .select('player_id, username')
+        .range(from, from + step - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      out.push(...data);
+      if (data.length < step) break;
+      from += step;
+    }
+    return out;
+  }
+
+  // ✅ 改版：只抓「學號為純數字」的學生
+  async function fetchApprovedStudentsFromA(){
+    const out = [];
+    let from = 0, step = 1000;
+    const numberOnly = /^[0-9]+$/;
+
+    while (true) {
+      const { data, error } = await aClient
+        .from('students')
+        .select('student_id, name, player_id, student_code')
+        .not('student_code', 'is', null)
+        .order('name', { ascending: true })
+        .range(from, from + step - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+
+      // ✅ 僅保留學號為純數字的學生
+      const numericStudents = data.filter(s => numberOnly.test(s.student_code));
+      out.push(...numericStudents);
+
+      if (data.length < step) break;
+      from += step;
+    }
+    return out;
+  }
+
+  async function upsertPlayersToC(rows){
+    if (!rows.length) return;
+    const payload = rows.map(x => ({ player_id: x.player_id, player_name: x.username }));
+    const { error } = await adminClient.from('player_links').upsert(payload, { onConflict:'player_id' });
+    if (error) throw error;
+  }
+
+  async function upsertStudentsToC(rows){
+    if (!rows.length) return;
+    const payload = rows.map(x => ({
+      student_id: x.student_id,
+      student_name: x.name,
+      player_id: x.player_id
+    }));
+    const { error } = await adminClient.from('student_cache').upsert(payload, { onConflict:'student_id' });
+    if (error) throw error;
+  }
+
+  // 初次載入
+  loadT1();
+}
 
 
 // ------------------------
