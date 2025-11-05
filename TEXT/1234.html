@@ -147,6 +147,13 @@
   transform: translate3d(var(--fromX,0), var(--fromY,0), 0);
 }
 
+  /* 出場前：先確定在終點=0位移、可見，避免還沒渲染就開始 out 動畫造成閃退 */
+.item.pre-out{
+  opacity: 1;
+  transform: translate3d(0,0,0);
+}
+
+
   
 </style>
 </head><body ondragstart="return false;">
@@ -368,27 +375,47 @@ async function playIn(pageIdx, {animateBg=true}={}) {
   return new Promise(r=>setTimeout(r, (end+0.05)*1000));
 }
 
-function playOut(pageIdx, {excludeBg=false}={}){
-  const nodes = qPageNodes(pageIdx); nodes.forEach(clearAnim);
-  nodes.forEach(n=>{
-    const isBg = n.classList.contains('bgfull');
-    if(excludeBg && isBg) return;
-    const base = (n.dataset.outDir==='auto') ? oppositeOut(n.dataset.inDir) : n.dataset.outDir;
+async function playOut(pageIdx, {excludeBg=false}={}) {
+  const nodes = qPageNodes(pageIdx); 
+  nodes.forEach(clearAnim);
+
+  // 要出場的目標
+  const targets = nodes.filter(n => !(excludeBg && n.classList.contains('bgfull')));
+
+  // 1) 預先算好 toX/toY，並先套上 pre-out（固定起點）
+  targets.forEach(n => {
+    const base = (n.dataset.outDir === 'auto') ? oppositeOut(n.dataset.inDir) : n.dataset.outDir;
     setOutVars(n, base, stage);
-    const custom = (n.dataset.outKind==='custom');
-    const name = custom ? ((n.dataset.outFade === '0') ? 'out-linear-nofade' : 'out-linear')
-                        : ((n.dataset.outFade === '0') ? 'out-to-nofade' : 'out-to');
-    const d = durOut(n);
-    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
-    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
+    n.classList.add('pre-out');
   });
-  const end = nodes.reduce((m,n)=>{
-    const isBg = n.classList.contains('bgfull');
-    if(excludeBg && isBg) return m;
-    return Math.max(m, Number(n.dataset.outDelay) + durOut(n));
-  },0);
-  return new Promise(r=>setTimeout(r, (end+0.05)*1000));
+
+  // 2) 等一幀，讓 pre-out 狀態被真正渲染
+  await new Promise(requestAnimationFrame);
+
+  // 3) 啟動動畫；動畫開始時把 pre-out 拿掉
+  const waits = [];
+  targets.forEach(n => {
+    const custom = (n.dataset.outKind === 'custom');
+    const name = custom
+      ? ((n.dataset.outFade === '0') ? 'out-linear-nofade' : 'out-linear')
+      : ((n.dataset.outFade === '0') ? 'out-to-nofade' : 'out-to');
+    const d = custom ? Number(n.dataset.outCustom) : Number(n.dataset.outSpeed);
+    const delay = Number(n.dataset.outDelay) || 0;
+
+    n.addEventListener('animationstart', () => n.classList.remove('pre-out'), { once: true });
+
+    const done = new Promise(res => n.addEventListener('animationend', res, { once: true }));
+    // 保險：萬一 animationend 沒觸發也不會卡住
+    const fallback = new Promise(r => setTimeout(r, (delay + d + 0.05) * 1000));
+    waits.push(Promise.race([done, fallback]));
+
+    n.style.animation = `${name} ${d}s ${(custom ? LIN : EASE)} ${delay}s both`;
+    n.style.webkitAnimation = n.style.animation;
+  });
+
+  await Promise.all(waits);
 }
+
 function removePage(pageIdx, {onlyNonBg=false}={}){
   qPageNodes(pageIdx).forEach(n=>{
     if(onlyNonBg && n.classList.contains('bgfull')) return;
