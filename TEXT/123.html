@@ -40,7 +40,6 @@
 
   .item{
     position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden;
-    contain: paint;                      /* Safari：避免濾鏡+transform 在 overflow 隱藏時被裁掉 */
     opacity:0;                           /* 防止初始閃現（之後由 JS 依 inFade 調整） */
     -webkit-transform:translateZ(0);
             transform:translateZ(0);
