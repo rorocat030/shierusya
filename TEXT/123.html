@@ -5,41 +5,28 @@
 <style>
   :root{ --ratio:12 / 8; }
 
-  /* 讓文件在任何外框/iframe 裡都能水平＋垂直置中 */
   html,body{ height:100%; }
   body{
     margin:0; background:transparent !important; color:#222;
-  font-family: "Segoe UI", "Roboto", "Helvetica Neue", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
-    user-select:none;
-    display:grid;            /* 核心：用 Grid 直接置中 */
-    place-items:center;      /* 水平 + 垂直置中 */
+    font-family: "Segoe UI", "Roboto", "Helvetica Neue", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    user-select:none; display:grid; place-items:center;
   }
 
-  /* 內層再保險一次（若父層高度不是視窗、但 iframe 給了高度，一樣置中） */
-  .centerer{
-    box-sizing:border-box;
-    width:100%; height:100%;
-    display:grid; place-items:center;
-    padding:0; background:transparent;
-  }
+  .centerer{ box-sizing:border-box; width:100%; height:100%; display:grid; place-items:center; padding:0; background:transparent; }
 
-  /* Viewer 本體：寬度吃滿容器，高度不超過容器（或 92vh） */
+  /* ★ 同時滿足「寬度 75%」與「最大高度 80vh」 */
   .box{
-    width:min(1200px, 75%);
-    height:min(92vh, 100%);
-    display:grid; grid-template-rows: 1fr auto; gap:.75rem;
+    width: min(1200px, 75vw, calc(80vh * (12/8)));
+    display:grid; grid-template-rows: 1fr 0; gap:.75rem;
     background:transparent; position:relative;
   }
 
-  .stageWrap{
-    width:100%; height:100%;
-    display:flex; align-items:center; justify-content:center;
-    background:transparent;
-  }
+  .stageWrap{ width:100%; display:flex; align-items:center; justify-content:center; background:transparent; }
   .stage{
     width:100%;
     aspect-ratio:var(--ratio);
     position:relative; overflow:hidden; border:none; background:transparent;
+    max-height:80vh; /* 保證不超過視窗高度 */
   }
 
   .controls{ display:flex; align-items:center; gap:.5rem; justify-content:center; padding:.25rem 0; background:transparent; }
@@ -47,7 +34,6 @@
   .item.bgfull{ left:0 !important; width:100% !important; }
   .item img{ display:block; width:100%; height:auto; transform-origin:center center; -webkit-user-drag:none; user-drag:none; }
 
-  /* 陰影樣式（與編輯器一致） */
   .layer-foreground img{
     filter:
       drop-shadow( 0.3em  0.3em   0 rgba(0,0,0,.55))
@@ -77,7 +63,6 @@
      drop-shadow(0 0em 2.5em rgba(0,0,0,0.6));
   }
 
-  /* 原生 in/out（相容） */
   @keyframes in-top    { 0%{transform:translateY(-130%);opacity:0} 70%{transform:translateY(3%);opacity:1} 100%{transform:translateY(0);opacity:1} }
   @keyframes in-bottom { 0%{transform:translateY(130%); opacity:0} 70%{transform:translateY(-3%);opacity:1} 100%{transform:translateY(0);opacity:1} }
   @keyframes in-left   { 0%{transform:translateX(-160%);opacity:0} 70%{transform:translateX(3%); opacity:1} 100%{transform:translateX(0);opacity:1} }
@@ -87,14 +72,13 @@
   @keyframes out-left   { 0%{transform:translateX(0);opacity:1} 18%{transform:translateX(4%)} 100%{transform:translateX(-160%);opacity:0} }
   @keyframes out-right  { 0%{transform:translateX(0);opacity:1} 18%{transform:translateX(-4%)} 100%{transform:translateX(160%); opacity:0} }
 
-  /* 一定從外進/出 */
   @keyframes in-from { 0%{ transform:translate(var(--fromX,0),var(--fromY,0)); opacity:0 } 70%{ transform:translate(var(--inOverX,0),var(--inOverY,0)); opacity:1 } 100%{ transform:translate(0,0); opacity:1 } }
   @keyframes in-from-nofade { 0%{ transform:translate(var(--fromX,0),var(--fromY,0)); } 70%{ transform:translate(var(--inOverX,0),var(--inOverY,0)); } 100%{ transform:translate(0,0); } }
   @keyframes out-to { 0%{ transform:translate(0,0); opacity:1 } 18%{ transform:translate(var(--outPreX,0),var(--outPreY,0)); } 100%{ transform:translate(var(--toX,0),var(--toY,0)); opacity:0 } }
   @keyframes out-to-nofade { 0%{ transform:translate(0,0); } 18%{ transform:translate(var(--outPreX,0),var(--outPreY,0)); } 100%{ transform:translate(var(--toX,0),var(--toY,0)); } }
 
   .navBtn{
-    display:flex; position:absolute; top:55%; transform:translateY(-50%);
+    display:flex; position:absolute; top:50%; transform:translateY(-50%);
     width:48px; height:48px; border-radius:50%;
     background:rgba(32,33,36,.7); color:#e8eaed; fill:#e8eaed;
     border:0; outline:none; cursor:pointer;
@@ -105,6 +89,11 @@
   .navBtn:hover{ background:rgba(32,33,36,.9); }
   .navBtn:active{ transform:translateY(-50%) scale(.98); }
   .hint{position:absolute; inset:auto 0 8px 0; text-align:center; font-size:12px; color:#888;}
+
+  /* 文字框內容 reset：避免第一個元素的上邊距造成頂部空白 */
+  .speech-bubble .content{ line-height:1.45; white-space:pre-wrap; word-break:break-word; margin:0; }
+  .speech-bubble .content > *:first-child{ margin-top:0; }
+  .speech-bubble .content br:first-child{ display:none; }
 </style>
 </head><body ondragstart="return false;">
 <div class="centerer">
