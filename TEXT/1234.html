@@ -1,1 +1,410 @@
 
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Paper Story Viewer</title>
+<style>
+  :root{ --ratio:12 / 8; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:transparent !important; color:#222;
+    font-family: "Segoe UI", "Roboto", "Helvetica Neue", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    user-select:none; display:grid; place-items:center;
+  }
+  .centerer{ box-sizing:border-box; width:100%; height:100%; display:grid; place-items:center; padding:0; background:transparent; }
+  .box{
+    width: min(1200px, 75vw, calc(80vh * (12/8)));
+    display:grid; grid-template-rows: 1fr 0; gap:.75rem;
+    background:transparent; position:relative;
+  }
+  .stageWrap{ width:100%; display:flex; align-items:center; justify-content:center; background:transparent; }
+  .stage{
+    width:100%;
+    aspect-ratio:var(--ratio);
+    position:relative; overflow:hidden; border:none; background:transparent;
+    max-height:80vh;
+  }
+  .controls{ display:flex; align-items:center; gap:.5rem; justify-content:center; padding:.25rem 0; background:transparent; }
+  .item{ position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
+
+  /* 這裡維持你原本的層級/樣式 */
+  .item.bgfull{ left:0 !important; width:100% !important; }
+  .item img{ display:block; width:100%; height:auto; transform-origin:center center; -webkit-user-drag:none; user-drag:none; }
+
+  /* ---------------- Safari/蘋果 修復區（無視覺變更，僅穩定繪製，且不使用 contain: paint） ---------------- */
+  /* 1) Safari 對濾鏡 + 動畫有合成層小毛病，加上 -webkit-filter 與隔離堆疊脈絡避免不繪製 */
+  .item{ isolation:isolate; } /* 不改視覺，但可避免濾鏡元素在父層動畫時被裁掉或不繪製 */
+
+  .layer-foreground img{
+    -webkit-filter:
+      drop-shadow( 0.3em  0.3em   0 rgba(0,0,0,.55))
+      drop-shadow(-0.3em  0       0 rgba(0,0,0,.55))
+      drop-shadow( 0      0.3em   0 rgba(0,0,0,.55))
+      drop-shadow( 0     -0.3em   0 rgba(0,0,0,.45))
+      drop-shadow( 0.1em  0.1em   0 rgba(0,0,0,.35))
+      drop-shadow(-0.1em  0.1em   0 rgba(0,0,0,.35))
+      drop-shadow( 0.1em -0.1em   0 rgba(0,0,0,.35))
+      drop-shadow(-0.1em -0.1em   0 rgba(0,0,0,.35))
+      drop-shadow(0 0em 10em rgba(0,0,0,1));
+  }
+  .layer-character img{
+    -webkit-filter:
+      drop-shadow( 0.3em  0.3em   0 rgba(0,0,0,.50))
+      drop-shadow(-0.2em -0.2em   0 rgba(0,0,0,.50))
+      drop-shadow( 0      0.2em   0 rgba(0,0,0,.50))
+      drop-shadow( 0     -0.2em   0 rgba(0,0,0,.40))
+      drop-shadow(0 1em 1em rgba(0,0,0,0.5));
+  }
+  .layer-background img{
+    -webkit-filter:
+     drop-shadow( 0.3em  0   0 rgba(0,0,0,.40))
+     drop-shadow(-0.3em  0   0 rgba(0,0,0,.40))
+     drop-shadow( 0    0.1em 0 rgba(0,0,0,.40))
+     drop-shadow( 0   -0.1em 0 rgba(0,0,0,.32))
+     drop-shadow(0 0em 2.5em rgba(0,0,0,0.6));
+  }
+  /* 為避免任何相容性差異，保留原本 filter（其他瀏覽器用），雙軌並存不影響外觀 */
+  .layer-foreground img{
+    filter:
+      drop-shadow( 0.3em  0.3em   0 rgba(0,0,0,.55))
+      drop-shadow(-0.3em  0       0 rgba(0,0,0,.55))
+      drop-shadow( 0      0.3em   0 rgba(0,0,0,.55))
+      drop-shadow( 0     -0.3em   0 rgba(0,0,0,.45))
+      drop-shadow( 0.1em  0.1em   0 rgba(0,0,0,.35))
+      drop-shadow(-0.1em  0.1em   0 rgba(0,0,0,.35))
+      drop-shadow( 0.1em -0.1em   0 rgba(0,0,0,.35))
+      drop-shadow(-0.1em -0.1em   0 rgba(0,0,0,.35))
+      drop-shadow(0 0em 10em rgba(0,0,0,1));
+  }
+  .layer-character img{
+    filter:
+      drop-shadow( 0.3em  0.3em   0 rgba(0,0,0,.50))
+      drop-shadow(-0.2em -0.2em   0 rgba(0,0,0,.50))
+      drop-shadow( 0      0.2em   0 rgba(0,0,0,.50))
+      drop-shadow( 0     -0.2em   0 rgba(0,0,0,.40))
+      drop-shadow(0 1em 1em rgba(0,0,0,0.5));
+  }
+  .layer-background img{
+    filter:
+     drop-shadow( 0.3em  0   0 rgba(0,0,0,.40))
+     drop-shadow(-0.3em  0   0 rgba(0,0,0,.40))
+     drop-shadow( 0    0.1em 0 rgba(0,0,0,.40))
+     drop-shadow( 0   -0.1em 0 rgba(0,0,0,.32))
+     drop-shadow(0 0em 2.5em rgba(0,0,0,0.6));
+  }
+  /* ---------------- 修復區結束 ---------------- */
+
+  .hint{position:absolute; inset:auto 0 8px 0; text-align:center; font-size:12px; color:#888;}
+
+  .speech-bubble .content{ line-height:1.45; white-space:pre-wrap; word-break:break-word; margin:0; }
+  .speech-bubble .content > *:first-child{ margin-top:0; }
+  .speech-bubble .content br:first-child{ display:none; }
+
+  /* 預設動畫（含回彈） —— 不動你的動畫邏輯 */
+  @keyframes in-from { 0%{ transform:translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0 } 70%{ transform:translate3d(var(--inOverX,0),var(--inOverY,0),0); opacity:1 } 100%{ transform:translate3d(0,0,0); opacity:1 } }
+  @keyframes in-from-nofade { 0%{ transform:translate3d(var(--fromX,0),var(--fromY,0),0); } 70%{ transform:translate3d(var(--inOverX,0),var(--inOverY,0),0); } 100%{ transform:translate3d(0,0,0); } }
+  @keyframes out-to { 0%{ transform:translate3d(0,0,0); opacity:1 } 18%{ transform:translate3d(var(--outPreX,0),var(--outPreY,0),0); } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); opacity:0 } }
+  @keyframes out-to-nofade { 0%{ transform:translate3d(0,0,0); } 18%{ transform:translate3d(var(--outPreX,0),var(--outPreY,0),0); } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); } }
+
+  /* 自訂：等速平移 —— 不動你的動畫邏輯 */
+  @keyframes in-linear { 0%{ transform:translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0 } 100%{ transform:translate3d(0,0,0); opacity:1 } }
+  @keyframes in-linear-nofade { 0%{ transform:translate3d(var(--fromX,0),var(--fromY,0),0); } 100%{ transform:translate3d(0,0,0); } }
+  @keyframes out-linear { 0%{ transform:translate3d(0,0,0); opacity:1 } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); opacity:0 } }
+  @keyframes out-linear-nofade { 0%{ transform:translate3d(0,0,0); } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); } }
+
+  .navBtn{
+    display:flex; position:absolute; top:50%; transform:translateY(-50%);
+    width:48px; height:48px; border-radius:50%;
+    background:rgba(32,33,36,.7); color:#e8eaed; fill:#e8eaed;
+    border:0; outline:none; cursor:pointer;
+    align-items:center; justify-content:center;
+    transition:background .3s; z-index:999999;
+  }
+  .box .navBtn.left{ left:-35px; } .box .navBtn.right{ right:-35px; }
+  .navBtn:hover{ background:rgba(32,33,36,.9); }
+  .navBtn:active{ transform:translateY(-50%) scale(.98); }
+</style>
+</head>
+<body ondragstart="return false;">
+<div class="centerer">
+  <div class="box">
+    <div class="stageWrap"><div id="stage" class="stage" aria-label="故事舞台"></div></div>
+
+    <button id="navPrev" class="navBtn left" aria-label="上一頁" title="上一頁">
+      <svg width="36" height="36" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true">
+        <path d="M30.83 32.92L21.66 23.75l9.17-9.17L28 11.75l-12 12 12 12z"></path>
+        <path d="M0-.25h48v48H0z" fill="none"></path>
+      </svg>
+    </button>
+    <button id="navNext" class="navBtn right" aria-label="下一頁" title="下一頁">
+      <svg width="36" height="36" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true">
+        <path d="M17.17 32.92l9.17-9.17-9.17-9.17L20 11.75l12 12-12 12z"></path>
+        <path d="M0-.25h48v48H0z" fill="none"></path>
+      </svg>
+    </button>
+
+    <div class="controls"><div id="hint" class="hint">正在預載圖片…</div></div>
+  </div>
+</div>
+<script>
+/* 你說「const project = 直接空值 我自己放」→ 這裡只放空殼，實際資料請由你覆蓋到 window.project */
+const project = {"pages":[{"id":"ny4zlqb","name":"第 1 頁","items":[{"id":"2kyz8b0","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/12345.jpg","layer":"bgfull","top":-1.4925373134328357,"left":0,"width":22,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"oixoxr2","name":"1","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":67.11603273952817,"left":72.81877043400218,"width":32.393102121930895,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"ss39rrr","name":"2","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":85.80966137056653,"left":88.13599162339466,"width":22,"order":1,"flipX":true,"rotate":173,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"11a9zaw","name":"3","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":66.70518375862622,"left":-3.9019595273201273,"width":31.162253990640426,"order":2,"flipX":false,"rotate":44,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"cbr6dd6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":82.52286952335098,"left":-7.868025728144966,"width":22,"order":3,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"i9v6duo","name":"很","layer":"speech","top":5.896324827475525,"left":3.8934119708528323,"width":61.05733273500438,"order":0,"inDir":"in-left","inDelay":0.6,"inSpeed":1.1,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":false,"outFade":true,"speech":{"html":"很久很久以前，巨龍突然出現","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#000000","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"33zsaz7","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/086.png","layer":"character","top":-0.4108489809019419,"left":1.2308481312904673,"width":100,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.8,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1}]},{"id":"ielfisj","name":"第 1 頁（副本）","items":[{"id":"jyvtw51","name":"1","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":67.11603273952817,"left":72.81877043400218,"width":32.393102121930895,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"eh725c8","name":"2","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":85.39881238966458,"left":88.4095134303481,"width":22,"order":1,"flipX":true,"rotate":173,"inDir":"in-bottom","inDelay":0.4,"inSpeed":0.7,"outDir":"auto","outDelay":0.2,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"u4ok5r2","name":"3","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":66.70518375862622,"left":-3.9019595273201273,"width":31.162253990640426,"order":2,"flipX":false,"rotate":44,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"8ibnve3","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":82.52286952335098,"left":-7.731264824668248,"width":22,"order":3,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.4,"inSpeed":0.7,"outDir":"auto","outDelay":0.2,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"tgowaex","name":"很","layer":"speech","top":5.896324827475525,"left":3.8934119708528323,"width":61.05733273500438,"order":0,"inDir":"in-left","inDelay":0.4,"inSpeed":1.1,"outDir":"auto","outDelay":0.6,"outSpeed":0.7,"inFade":false,"outFade":true,"speech":{"html":"帶走了公主就消失不見．．．","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#000000","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"4ozhs1z","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/071-1.png","layer":"character","top":66.70518375862622,"left":29.19417911404577,"width":22,"order":0,"flipX":false,"rotate":4,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-top","outDelay":0,"outSpeed":0.5,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"u4q8jj6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/086.png","layer":"character","top":60.95329802599904,"left":41.22913861999701,"width":22,"order":1,"flipX":false,"rotate":0,"inDir":"in-right","inDelay":1,"inSpeed":0.35,"outDir":"out-top","outDelay":0,"outSpeed":0.5,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"qgvtikv","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"character","top":83.75541646605681,"left":41.9129431373806,"width":8.733465820458576,"order":2,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-bottom","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"4mypwxo","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"background","top":64.85636334456748,"left":25.63839562365109,"width":22,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-bottom","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1}]},{"id":"34v5p2d","name":"第 2 頁","items":[{"id":"heedjt8","name":"71","src":"https://rorocat030.github.io/shierusya/shierusya-gacha/3rd-dress/dress-04.png","layer":"character","top":37.55326704545455,"left":18.942107127395804,"width":30.75197128021027,"order":1,"flipX":false,"rotate":4,"inDir":"in-bottom","inDelay":0.6,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"bozef86","name":"86","src":"https://rorocat030.github.io/shierusya/shierusya-gacha/3rd-dress/dress-05.png","layer":"character","top":20.052083333333336,"left":40.875280412452284,"width":40.46199542705729,"order":0,"flipX":false,"rotate":7,"inDir":"in-bottom","inDelay":0.6,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"zjs5up6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/marry.jpg","layer":"bgfull","top":-6.27219737020469,"left":0,"width":100,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"rdcjspf","name":"九","layer":"speech","top":4.869202375220671,"left":5.808064619526893,"width":30.835309955766395,"order":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"他們已婚!!!!","side":"bottom","triangle":"right","pointer":32,"nudge":true,"sizeEm":1.2,"padEm":0.5,"bgHex":"#ff4747","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0.03},"inCustomDur":1,"outCustomDur":1},{"id":"4oqglfm","name":"已婚","layer":"speech","top":18.825461647727273,"left":68.67911153119093,"width":16.977788279773158,"order":1,"inDir":"in-left","inDelay":1,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#fe8686","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"cg1oldf","name":"恭喜","layer":"speech","top":73.2787674530573,"left":8.141547535098404,"width":22.766416650639997,"order":2,"inDir":"in-right","inDelay":1,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#ff6666","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"r5uy4nv","name":"恭喜","layer":"speech","top":49.893465909090914,"left":-14.699515919556063,"width":14.699515919556063,"order":4,"inDir":"in-right","inDelay":0.4,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#feffad","alpha":100,"textHex":"#000000","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"qwtl6ej","name":"已婚","layer":"speech","top":29.154829545454547,"left":-14.707387146286749,"width":14.707387146286749,"order":3,"inDir":"in-right","inDelay":0.2,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#7a2424","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"efv74fl","name":"已婚（複製）","layer":"speech","top":12.955729166666666,"left":-13.19611161399504,"width":13.19611161399504,"order":5,"inDir":"in-right","inDelay":0.6,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#7a2424","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"j00tcak","name":"恭喜（複製）","layer":"speech","top":26.509232954545453,"left":-14.699515919556063,"width":14.699515919556063,"order":6,"inDir":"in-right","inDelay":1,"inSpeed":"custom","outDir":"out-left","outDelay":1,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#feffad","alpha":100,"textHex":"#000000","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1}]}],"currentPage":2,"ratio":{"w":12,"h":8}};
+
+const EASE='cubic-bezier(.2,.9,.2,1)';
+const LIN='linear';
+
+let idx = 0;
+let busy = false;
+const stage = document.getElementById('stage');
+const navPrev = document.getElementById('navPrev');
+const navNext = document.getElementById('navNext');
+const hintEl = document.getElementById('hint');
+
+function zBase(layer){ return layer==='foreground'?30: layer==='speech'?25: layer==='character'?20: layer==='background'?10: 0; }
+function zIndexOf(it){ return zBase(it.layer)*100 + (it.order||0); }
+function zIndexForPreview(it, pageIdx){ return pageIdx*10000 + zIndexOf(it); }
+function oppositeOut(inDir){ return ({'in-top':'out-top','in-bottom':'out-bottom','in-left':'out-left','in-right':'out-right'})[inDir] || 'out-bottom'; }
+function rgba(hex,a){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)||['','00','00','00']; const r=parseInt(m[1],16), g=parseInt(m[2],16), b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; }
+function textFromHTML(html){ const d=document.createElement('div'); d.innerHTML=html||''; return d.textContent||d.innerText||''; }
+
+function rectIn(el, container){ const r=el.getBoundingClientRect(), s=container.getBoundingClientRect(); return { x:r.left-s.left, y:r.top-s.top, w:r.width, h:r.height, sw:s.width, sh:s.height }; }
+function overshoot(px){ return Math.min(24, Math.abs(px)*0.03) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
+function preNudge(px){ return Math.min(24, Math.abs(px)*0.04) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
+function setInVars(node, dir, container){
+  const r=rectIn(node, container);
+  let v;
+  if(dir==='in-left')   v={ x:-(r.x + r.w + 4), y:0 };
+  else if(dir==='in-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
+  else if(dir==='in-top')   v={ x:0, y:-(r.y + r.h + 4) };
+  else                      v={ x:0, y:(r.sh - r.y)+r.h + 4 };
+  node.style.setProperty('--fromX', v.x+'px'); node.style.setProperty('--fromY', v.y+'px');
+  node.style.setProperty('--inOverX', overshoot(v.x)+'px'); node.style.setProperty('--inOverY', overshoot(v.y)+'px');
+}
+function setOutVars(node, dir, container){
+  const r=rectIn(node, container);
+  let v;
+  if(dir==='out-left')   v={ x:-(r.x + r.w + 4), y:0 };
+  else if(dir==='out-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
+  else if(dir==='out-top')   v={ x:0, y:-(r.y + r.h + 4) };
+  else                       v={ x:0, y:(r.sh - r.y)+r.h + 4 };
+  node.style.setProperty('--toX', v.x+'px'); node.style.setProperty('--toY', v.y+'px');
+  node.style.setProperty('--outPreX', preNudge(v.x)+'px'); node.style.setProperty('--outPreY', preNudge(v.y)+'px');
+}
+
+function bubbleCSS(selector,s){
+  let triRaw = s.triangle || 'sym'; if(triRaw==='symmetrical') triRaw='sym';
+  const br = (s.brMode === 'per')
+    ? `${Number(s.brTL||0)}px ${Number(s.brTR||0)}px ${Number(s.brBR||0)}px ${Number(s.brBL||0)}px`
+    : `${Number(s.brAll||16)}px`;
+  const base = `${selector}{ position:relative; display:block; box-sizing:border-box; width:100%;
+    padding:${s.padEm}em; background:${s.bg}; color:${s.textColor};
+    font-weight:700; text-shadow:0 -.05em .1em rgba(0,0,0,.3); border-radius:${br}; }`;
+  if(triRaw === 'none') return base;
+  const side = s.side || 'bottom', isH = (side==='top'||side==='bottom');
+  const opposite = {top:'bottom', right:'left', bottom:'top', left:'right'}[side];
+  const offsetAxis = isH ? 'left' : 'top';
+  const size = `${s.sizeEm}em`;
+  const nearEm = Math.max(0, Math.min(0.05, Number(s.nudgeEm ?? (s.nudge ? 0.05 : 0))));
+  const near = `${nearEm}em`;
+  const triKey = (triRaw==='sym') ? 'symmetrical' : (triRaw==='left'?'left':'right');
+  const cut = (triKey!=='symmetrical') ? (isH ? triKey : (triKey==='right'?'top':'bottom')) : null;
+  const marginOffset = (triKey==='symmetrical') ? `-${size}` : `calc(-${size}/2)`;
+  const arrow = `${selector}:after{ content:''; position:absolute; ${side}:${near}; ${offsetAxis}:${Math.max(10,Math.min(90,s.pointer))}%;
+    width:0; height:0; border-style:solid; border-color:transparent; border-width:${size};
+    border-${side}-width:0; border-${opposite}-color:${s.bg}; ${cut ? `border-${cut}-width:0;` : ''} margin-${offsetAxis}:${marginOffset}; margin-${side}:-${size}; }`;
+  return base + arrow;
+}
+function autoFontPxForNode(node, s){
+  const raw=textFromHTML(s.html||''); const lines=raw.split(/\r?\n/).map(x=>x.trim()); const longest=lines.reduce((m,l)=> l.length>m.length?l:m,'')||raw;
+  const meas=document.createElement('span'); Object.assign(meas.style,{position:'absolute',visibility:'hidden',whiteSpace:'pre',left:'-9999px',top:'-9999px',fontWeight:'700'}); meas.textContent=longest||''; document.body.appendChild(meas);
+  const tryFit = (px)=>{ const padPx=(Number(s.padEm||1))*px*2; const inner=Math.max(10, node.getBoundingClientRect().width - padPx); meas.style.fontSize=px+'px'; const w=meas.getBoundingClientRect().width; return w<=inner; };
+  let lo=6, hi, test=16, lastOk=lo;
+  while(test<=1024 && tryFit(test)){ lastOk=test; test=Math.ceil(test*1.5); }
+  hi=Math.min(1024, Math.max(test, lastOk+1)); lo=lastOk;
+  let best=lo; for(let i=0;i<15;i++){ const mid=(lo+hi)/2; if(tryFit(mid)){ best=mid; lo=mid; } else { hi=mid; } }
+  document.body.removeChild(meas); return best;
+}
+
+function createNode(it, pageIdx){
+  const d=document.createElement('div');
+  d.className='item layer-'+it.layer + (it.layer==='bgfull'?' bgfull': (it.layer==='speech'?' speech':'' ));
+  d.style.top=it.top+'%'; d.style.left=(it.layer==='bgfull'?'0':it.left)+'%'; d.style.width=(it.layer==='bgfull'?'100':it.width)+'%';
+  d.style.zIndex=zIndexForPreview(it, pageIdx);
+  if(it.layer==='speech'){
+    const bubble=document.createElement('div'); bubble.className='speech-bubble speech-'+it.id;
+    const content=document.createElement('div'); content.className='content'; content.innerHTML=it.speech?.html||''; bubble.appendChild(content); d.appendChild(bubble);
+    const st=document.createElement('style'); st.textContent=bubbleCSS('.speech-'+it.id,{
+      side:it.speech.side||'bottom',
+      triangle:(it.speech.triangle==='symmetrical'?'sym':(it.speech.triangle||'sym')),
+      pointer:Math.max(10,Math.min(90, Number(it.speech.pointer||50))),
+      nudgeEm: Math.max(0, Math.min(0.05, Number(it.speech.nudgeEm ?? (it.speech.nudge ? 0.05 : 0)))),
+      sizeEm:Number(it.speech.sizeEm||1.2), padEm:Number(it.speech.padEm||1),
+      bg:rgba(it.speech.bgHex||'#00aabb',(Number(it.speech.alpha||100)/100)),
+      textColor:it.speech.textHex||'#ffffff',
+      brMode:it.speech.brMode||'unified',
+      brAll:Number(it.speech.brAll??16),
+      brTL:Number(it.speech.brTL ?? it.speech.brAll ?? 16),
+      brTR:Number(it.speech.brTR ?? it.speech.brAll ?? 16),
+      brBR:Number(it.speech.brBR ?? it.speech.brAll ?? 16),
+      brBL:Number(it.speech.brBL ?? it.speech.brAll ?? 16),
+    }); d.appendChild(st);
+  }else{
+    const img=document.createElement('img'); img.src=it.src; img.alt=it.name||''; img.setAttribute('draggable','false');
+    if(it.layer==='bgfull'){ img.style.transform='none'; } else { img.style.transform='scaleX('+(it.flipX?-1:1)+') rotate('+(it.rotate||0)+'deg)'; }
+    d.appendChild(img);
+  }
+  d.dataset.inDir=it.inDir; d.dataset.inDelay=it.inDelay; d.dataset.inSpeed=String(it.inSpeed);
+  d.dataset.outDir=it.outDir||'auto'; d.dataset.outDelay=it.outDelay; d.dataset.outSpeed=String(it.outSpeed);
+  d.dataset.inKind=(it.inSpeed==='custom')?'custom':'preset';
+  d.dataset.outKind=(it.outSpeed==='custom')?'custom':'preset';
+  d.dataset.inCustom=String(Math.max(0.2,Math.min(15, Number(it.inCustomDur||1))));
+  d.dataset.outCustom=String(Math.max(0.2,Math.min(15, Number(it.outCustomDur||1))));
+  d.dataset.page=String(pageIdx); d.dataset.item=it.id;
+  d.dataset.inFade=(it.inFade===false?'0':'1'); d.dataset.outFade=(it.outFade===false?'0':'1');
+  return d;
+}
+function qPageNodes(p){ return [...stage.querySelectorAll('.item[data-page="'+p+'"]')]; }
+function clearAnim(n){ n.style.animation='none'; n.style.webkitAnimation='none'; void n.offsetWidth; }
+
+function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
+  const p = project.pages[pageIdx];
+  if(!p) return; /* 防守：空殼 pages 時不做事（不改動動畫邏輯本身） */
+  p.items.forEach(it=>{
+    if(onlyNonBg && it.layer==='bgfull') return;
+    if(it.layer==='bgfull' && stage.querySelector('.item[data-page="'+pageIdx+'"][data-item="'+it.id+'"]')) return;
+    const n = createNode(it, pageIdx);
+    if(it.layer==='bgfull' && markFirstBgPersisted) n.dataset.persisted='1';
+    stage.appendChild(n);
+    if(it.layer==='speech') {
+      const px1 = autoFontPxForNode(n, it.speech||{});
+      n.querySelector('.speech-bubble').style.fontSize = px1 + 'px';
+      requestAnimationFrame(()=>{ const px2 = autoFontPxForNode(n, it.speech||{}); n.querySelector('.speech-bubble').style.fontSize = px2 + 'px'; });
+    }
+  });
+}
+function durIn(n){ return (n.dataset.inKind==='custom')? Number(n.dataset.inCustom): Number(n.dataset.inSpeed); }
+function durOut(n){ return (n.dataset.outKind==='custom')? Number(n.dataset.outCustom): Number(n.dataset.outSpeed); }
+function playIn(pageIdx, {animateBg=true}={}){
+  const nodes = qPageNodes(pageIdx); nodes.forEach(clearAnim);
+  nodes.forEach(n=>{
+    const isBg = n.classList.contains('bgfull');
+    const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
+    const skipOpt = isBg && !animateBg;
+    if(skipFirstOrPersist || skipOpt) return;
+    setInVars(n, n.dataset.inDir, stage);
+    const custom = (n.dataset.inKind==='custom');
+    const name = custom ? ((n.dataset.inFade === '0') ? 'in-linear-nofade' : 'in-linear')
+                        : ((n.dataset.inFade === '0') ? 'in-from-nofade' : 'in-from');
+    const d = durIn(n);
+    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
+    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
+  });
+  const end = nodes.reduce((m,n)=>{
+    const isBg = n.classList.contains('bgfull');
+    const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
+    const skipOpt = isBg && !animateBg;
+    if(skipFirstOrPersist || skipOpt) return m;
+    return Math.max(m, Number(n.dataset.inDelay) + durIn(n));
+  },0);
+  return new Promise(r=>setTimeout(r, (end+0.05)*1000));
+}
+function playOut(pageIdx, {excludeBg=false}={}){
+  const nodes = qPageNodes(pageIdx); nodes.forEach(clearAnim);
+  nodes.forEach(n=>{
+    const isBg = n.classList.contains('bgfull');
+    if(excludeBg && isBg) return;
+    const base = (n.dataset.outDir==='auto') ? oppositeOut(n.dataset.inDir) : n.dataset.outDir;
+    setOutVars(n, base, stage);
+    const custom = (n.dataset.outKind==='custom');
+    const name = custom ? ((n.dataset.outFade === '0') ? 'out-linear-nofade' : 'out-linear')
+                        : ((n.dataset.outFade === '0') ? 'out-to-nofade' : 'out-to');
+    const d = durOut(n);
+    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
+    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
+  });
+  const end = nodes.reduce((m,n)=>{
+    const isBg = n.classList.contains('bgfull');
+    if(excludeBg && isBg) return m;
+    return Math.max(m, Number(n.dataset.outDelay) + durOut(n));
+  },0);
+  return new Promise(r=>setTimeout(r, (end+0.05)*1000));
+}
+function removePage(pageIdx, {onlyNonBg=false}={}){
+  qPageNodes(pageIdx).forEach(n=>{
+    if(onlyNonBg && n.classList.contains('bgfull')) return;
+    n.remove();
+  });
+}
+
+function preloadAllImages(){
+  const urls = new Set();
+  (project.pages||[]).forEach(p=>{ (p.items||[]).forEach(it=>{ if(it.layer!=='speech' && it.src) urls.add(it.src); }); });
+  const tasks = [...urls].map(u => new Promise(resolve=>{
+    const im = new Image(); im.referrerPolicy='no-referrer';
+    im.onload=()=>resolve(); im.onerror=()=>resolve(); im.src=u;
+  }));
+  return Promise.allSettled(tasks);
+}
+
+function openAt(current){
+  if(!project.pages || !project.pages.length) return; /* 空殼時直接不跑，等你塞資料 */
+  idx = current;
+  stage.innerHTML='';
+  addPage(0, {markFirstBgPersisted:true});
+  if(idx>0){
+    for(let i=1;i<=idx;i++){
+      removePage(i-1, {onlyNonBg:true});
+      addPage(i);
+    }
+  }
+  playIn(idx);
+}
+
+async function go(to){
+  if(to===idx) return;
+  if(busy) return;
+  busy = true;
+  try{
+    if(to>idx){
+      await playOut(idx, {excludeBg:true});
+      removePage(idx, {onlyNonBg:true});
+      idx = to; addPage(idx); await playIn(idx, {animateBg:true});
+    }else{
+      await playOut(idx, {excludeBg:false});
+      removePage(idx, {onlyNonBg:false});
+      idx = to; addPage(idx, {onlyNonBg:true}); await playIn(idx, {animateBg:false});
+    }
+  }finally{
+    busy = false;
+  }
+}
+
+navPrev.onclick = ()=> { if(idx>0) go(idx-1); };
+navNext.onclick = ()=> { if(idx<(project.pages?.length||1)-1) go(idx+1); };
+document.addEventListener('keydown', (e)=>{ if(busy) return; if(e.key==='ArrowLeft') navPrev.click(); if(e.key==='ArrowRight') navNext.click(); });
+
+window.addEventListener('resize', debounce(()=>{
+  qPageNodes(idx).forEach(n=>{
+    const pg = project.pages[idx];
+    const it = pg?.items?.find(x=>x.id===n.dataset.item);
+    if(it?.layer==='speech'){
+      const px1 = autoFontPxForNode(n, it.speech||{});
+      n.querySelector('.speech-bubble').style.fontSize = px1 + 'px';
+      requestAnimationFrame(()=>{ const px2 = autoFontPxForNode(n, it.speech||{}); n.querySelector('.speech-bubble').style.fontSize = px2 + 'px'; });
+    }
+  });
+}, 120));
+
+(async ()=>{
+  try{ await preloadAllImages(); }
+  finally{
+    if(hintEl) hintEl.remove();
+    openAt(project.currentPage ?? 0);
+  }
+})();
+function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+</script>
+</body>
+</html>
