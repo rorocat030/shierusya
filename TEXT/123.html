@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="zh-Hant"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+
+  <!-- 放在 <head> -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icon-180.png">
+
+
+  
 <title>Paper Story Viewer</title>
 <style>
   :root{ --ratio:12 / 8; }
@@ -26,7 +34,9 @@
   .controls{ display:flex; align-items:center; gap:.5rem; justify-content:center; padding:.25rem 0; background:transparent; }
   .item{ position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
   .item.bgfull{ left:0 !important; width:100% !important; }
-  .item img{ display:block; width:100%; height:auto; transform-origin:center center; -webkit-user-drag:none; user-drag:none; }
+  .item img{ display:block; width:100%; height:auto; transform-origin:center center; -webkit-user-drag:none; user-drag:none; 
+           transform: translateZ(0); will-change: transform, opacity;
+           }
 
   .layer-foreground img{
     filter:
