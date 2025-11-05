@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="zh-Hant"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="referrer" content="no-referrer"/>
 <title>Paper Story Viewer</title>
 <style>
   :root{ --ratio:12 / 8; }
@@ -24,9 +26,21 @@
     max-height:80vh;
   }
   .controls{ display:flex; align-items:center; gap:.5rem; justify-content:center; padding:.25rem 0; background:transparent; }
-  .item{ position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
+
+  .item{
+    position:absolute;
+    will-change: transform, opacity;
+    -webkit-backface-visibility:hidden; backface-visibility:hidden;
+    transform: translateZ(0); -webkit-transform: translateZ(0);
+  }
   .item.bgfull{ left:0 !important; width:100% !important; }
-  .item img{ display:block; width:100%; height:auto; transform-origin:center center; -webkit-user-drag:none; user-drag:none; }
+  .item img{
+    display:block; width:100%; height:auto; transform-origin:center center;
+    -webkit-user-drag:none; user-drag:none;
+    will-change: transform, opacity;
+    -webkit-backface-visibility:hidden; backface-visibility:hidden;
+    transform: translateZ(0); -webkit-transform: translateZ(0);
+  }
 
   .layer-foreground img{
     filter:
@@ -63,11 +77,23 @@
   @keyframes out-to { 0%{ transform:translate3d(0,0,0); opacity:1 } 18%{ transform:translate3d(var(--outPreX,0),var(--outPreY,0),0); } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); opacity:0 } }
   @keyframes out-to-nofade { 0%{ transform:translate3d(0,0,0); } 18%{ transform:translate3d(var(--outPreX,0),var(--outPreY,0),0); } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); } }
 
+  /* iOS 相容前綴 */
+  @-webkit-keyframes in-from { 0%{ -webkit-transform:translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0 } 70%{ -webkit-transform:translate3d(var(--inOverX,0),var(--inOverY,0),0); opacity:1 } 100%{ -webkit-transform:translate3d(0,0,0); opacity:1 } }
+  @-webkit-keyframes in-from-nofade { 0%{ -webkit-transform:translate3d(var(--fromX,0),var(--fromY,0),0); } 70%{ -webkit-transform:translate3d(var(--inOverX,0),var(--inOverY,0),0); } 100%{ -webkit-transform:translate3d(0,0,0); } }
+  @-webkit-keyframes out-to { 0%{ -webkit-transform:translate3d(0,0,0); opacity:1 } 18%{ -webkit-transform:translate3d(var(--outPreX,0),var(--outPreY,0),0); } 100%{ -webkit-transform:translate3d(var(--toX,0),var(--toY,0),0); opacity:0 } }
+  @-webkit-keyframes out-to-nofade { 0%{ -webkit-transform:translate3d(0,0,0); } 18%{ -webkit-transform:translate3d(var(--outPreX,0),var(--outPreY,0),0); } 100%{ -webkit-transform:translate3d(var(--toX,0),var(--toY,0),0); } }
+
   /* 自訂：等速平移 */
   @keyframes in-linear { 0%{ transform:translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0 } 100%{ transform:translate3d(0,0,0); opacity:1 } }
   @keyframes in-linear-nofade { 0%{ transform:translate3d(var(--fromX,0),var(--fromY,0),0); } 100%{ transform:translate3d(0,0,0); } }
   @keyframes out-linear { 0%{ transform:translate3d(0,0,0); opacity:1 } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); opacity:0 } }
   @keyframes out-linear-nofade { 0%{ transform:translate3d(0,0,0); } 100%{ transform:translate3d(var(--toX,0),var(--toY,0),0); } }
+
+  /* iOS 相容前綴（linear） */
+  @-webkit-keyframes in-linear { 0%{ -webkit-transform:translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0 } 100%{ -webkit-transform:translate3d(0,0,0); opacity:1 } }
+  @-webkit-keyframes in-linear-nofade { 0%{ -webkit-transform:translate3d(var(--fromX,0),var(--fromY,0),0); } 100%{ -webkit-transform:translate3d(0,0,0); } }
+  @-webkit-keyframes out-linear { 0%{ -webkit-transform:translate3d(0,0,0); opacity:1 } 100%{ -webkit-transform:translate3d(var(--toX,0),var(--toY,0),0); opacity:0 } }
+  @-webkit-keyframes out-linear-nofade { 0%{ -webkit-transform:translate3d(0,0,0); } 100%{ -webkit-transform:translate3d(var(--toX,0),var(--toY,0),0); } }
 
   .navBtn{
     display:flex; position:absolute; top:50%; transform:translateY(-50%);
@@ -125,28 +151,37 @@ function oppositeOut(inDir){ return ({'in-top':'out-top','in-bottom':'out-bottom
 function rgba(hex,a){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)||['','00','00','00']; const r=parseInt(m[1],16), g=parseInt(m[2],16), b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; }
 function textFromHTML(html){ const d=document.createElement('div'); d.innerHTML=html||''; return d.textContent||d.innerText||''; }
 
-function rectIn(el, container){ const r=el.getBoundingClientRect(), s=container.getBoundingClientRect(); return { x:r.left-s.left, y:r.top-s.top, w:r.width, h:r.height, sw:s.width, sh:s.height }; }
 function overshoot(px){ return Math.min(24, Math.abs(px)*0.03) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
 function preNudge(px){ return Math.min(24, Math.abs(px)*0.04) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
+
+/* 以舞台尺寸推算向量（不依賴圖片尺寸，iOS 穩定） */
 function setInVars(node, dir, container){
-  const r=rectIn(node, container);
+  const s = container.getBoundingClientRect();
+  const offX = s.width  + 200;
+  const offY = s.height + 200;
   let v;
-  if(dir==='in-left')   v={ x:-(r.x + r.w + 4), y:0 };
-  else if(dir==='in-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
-  else if(dir==='in-top')   v={ x:0, y:-(r.y + r.h + 4) };
-  else                      v={ x:0, y:(r.sh - r.y)+r.h + 4 };
-  node.style.setProperty('--fromX', v.x+'px'); node.style.setProperty('--fromY', v.y+'px');
-  node.style.setProperty('--inOverX', overshoot(v.x)+'px'); node.style.setProperty('--inOverY', overshoot(v.y)+'px');
+  if(dir==='in-left')   v={ x:-offX, y:0 };
+  else if(dir==='in-right') v={ x:offX, y:0 };
+  else if(dir==='in-top')   v={ x:0, y:-offY };
+  else                      v={ x:0, y:offY };
+  node.style.setProperty('--fromX', v.x+'px');
+  node.style.setProperty('--fromY', v.y+'px');
+  node.style.setProperty('--inOverX', overshoot(v.x)+'px');
+  node.style.setProperty('--inOverY', overshoot(v.y)+'px');
 }
 function setOutVars(node, dir, container){
-  const r=rectIn(node, container);
+  const s = container.getBoundingClientRect();
+  const offX = s.width  + 200;
+  const offY = s.height + 200;
   let v;
-  if(dir==='out-left')   v={ x:-(r.x + r.w + 4), y:0 };
-  else if(dir==='out-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
-  else if(dir==='out-top')   v={ x:0, y:-(r.y + r.h + 4) };
-  else                       v={ x:0, y:(r.sh - r.y)+r.h + 4 };
-  node.style.setProperty('--toX', v.x+'px'); node.style.setProperty('--toY', v.y+'px');
-  node.style.setProperty('--outPreX', preNudge(v.x)+'px'); node.style.setProperty('--outPreY', preNudge(v.y)+'px');
+  if(dir==='out-left')   v={ x:-offX, y:0 };
+  else if(dir==='out-right') v={ x:offX, y:0 };
+  else if(dir==='out-top')   v={ x:0, y:-offY };
+  else                      v={ x:0, y:offY };
+  node.style.setProperty('--toX', v.x+'px');
+  node.style.setProperty('--toY', v.y+'px');
+  node.style.setProperty('--outPreX', preNudge(v.x)+'px');
+  node.style.setProperty('--outPreY', preNudge(v.y)+'px');
 }
 
 function bubbleCSS(selector,s){
@@ -207,8 +242,15 @@ function createNode(it, pageIdx){
       brBL:Number(it.speech.brBL ?? it.speech.brAll ?? 16),
     }); d.appendChild(st);
   }else{
-    const img=document.createElement('img'); img.src=it.src; img.alt=it.name||''; img.setAttribute('draggable','false');
-    if(it.layer==='bgfull'){ img.style.transform='none'; } else { img.style.transform='scaleX('+(it.flipX?-1:1)+') rotate('+(it.rotate||0)+'deg)'; }
+    const img=document.createElement('img');
+    img.src=it.src; img.alt=it.name||''; img.setAttribute('draggable','false');
+    img.referrerPolicy='no-referrer'; img.decoding='async'; img.loading='eager';
+    if(it.layer==='bgfull'){
+      img.style.transform='none'; img.style.webkitTransform='none';
+    } else {
+      const t='scaleX('+(it.flipX?-1:1)+') rotate('+(it.rotate||0)+'deg)';
+      img.style.transform=t; img.style.webkitTransform=t;
+    }
     d.appendChild(img);
   }
   d.dataset.inDir=it.inDir; d.dataset.inDelay=it.inDelay; d.dataset.inSpeed=String(it.inSpeed);
@@ -222,7 +264,9 @@ function createNode(it, pageIdx){
   return d;
 }
 function qPageNodes(p){ return [...stage.querySelectorAll('.item[data-page="'+p+'"]')]; }
-function clearAnim(n){ n.style.animation='none'; n.style.webkitAnimation='none'; void n.offsetWidth; }
+function clearAnim(n){
+  n.style.animation='none'; n.style.webkitAnimation='none'; void n.offsetWidth;
+}
 
 function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
   const p = project.pages[pageIdx];
@@ -253,8 +297,8 @@ function playIn(pageIdx, {animateBg=true}={}){
     const name = custom ? ((n.dataset.inFade === '0') ? 'in-linear-nofade' : 'in-linear')
                         : ((n.dataset.inFade === '0') ? 'in-from-nofade' : 'in-from');
     const d = durIn(n);
-    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
-    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
+    const v = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
+    n.style.animation = v; n.style.webkitAnimation = v;
   });
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
@@ -276,8 +320,8 @@ function playOut(pageIdx, {excludeBg=false}={}){
     const name = custom ? ((n.dataset.outFade === '0') ? 'out-linear-nofade' : 'out-linear')
                         : ((n.dataset.outFade === '0') ? 'out-to-nofade' : 'out-to');
     const d = durOut(n);
-    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
-    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
+    const v = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
+    n.style.animation = v; n.style.webkitAnimation = v;
   });
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
@@ -355,6 +399,8 @@ window.addEventListener('resize', debounce(()=>{
   try{ await preloadAllImages(); }
   finally{
     if(hintEl) hintEl.remove();
+    // ★ iOS：等到 layout/paint 完成再開播（雙 rAF）
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     openAt(0);
   }
 })();
