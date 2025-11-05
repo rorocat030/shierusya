@@ -3,6 +3,7 @@
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Paper Story Viewer</title>
 <style>
+  
   :root{ --ratio:12 / 8; }
   html,body{ height:100%; }
   body{
@@ -133,6 +134,12 @@
   .speech-bubble .content{ line-height:1.45; white-space:pre-wrap; word-break:break-word; margin:0; }
   .speech-bubble .content > *:first-child{ margin-top:0; }
   .speech-bubble .content br:first-child{ display:none; }
+
+  .item{
+    backface-visibility: visible !important;
+    -webkit-backface-visibility: visible !important;
+    will-change: auto !important;
+  }
 </style>
 </head><body ondragstart="return false;">
 <div class="centerer">
