@@ -135,7 +135,11 @@
   .speech-bubble .content > *:first-child{ margin-top:0; }
   .speech-bubble .content br:first-child{ display:none; }
 
-  
+    .item{
+    backface-visibility: visible !important;
+    -webkit-backface-visibility: visible !important;
+    will-change: auto !important;
+  }
 </style>
 </head><body ondragstart="return false;">
 <div class="centerer">
