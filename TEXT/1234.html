@@ -1,7 +1,13 @@
 <!doctype html>
 <html lang="zh-Hant"><head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+
+<!-- 放在 <head> -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+
+
 <title>Paper Story Viewer</title>
 <style>
   :root{ --ratio:12 / 8; }
@@ -25,10 +31,7 @@
     max-height:80vh;
   }
   .controls{ display:flex; align-items:center; gap:.5rem; justify-content:center; padding:.25rem 0; background:transparent; }
-
-  /* 先隱藏，避免「看到終態再開始動」的閃爍 */
-  .item{ position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden;
-         visibility:hidden; opacity:0; }
+  .item{ position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
   .item.bgfull{ left:0 !important; width:100% !important; }
   .item img{ display:block; width:100%; height:auto; transform-origin:center center; -webkit-user-drag:none; user-drag:none; }
 
@@ -59,6 +62,7 @@
      drop-shadow(0 0em 1em rgba(0,0,0,0.6))
   }
 
+  /* 只在 iOS 啟用：-webkit-overflow-scrolling 是 iOS 專屬特性 */
 @supports (-webkit-overflow-scrolling: touch) {
   .layer-foreground img{
     filter:
@@ -80,43 +84,45 @@
   }
 }
 
-  /* 全部用 translate3d，Safari 友善 */
-  @keyframes in-from {
-    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0; }
-    70%  { transform: translate3d(var(--inOverX,0),var(--inOverY,0),0); opacity:1; }
-    100% { transform: translate3d(0,0,0); opacity:1; }
-  }
-  @keyframes in-from-nofade {
-    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); }
-    70%  { transform: translate3d(var(--inOverX,0),var(--inOverY,0),0); }
-    100% { transform: translate3d(0,0,0); }
-  }
-  @keyframes out-to {
-    0%   { transform: translate3d(0,0,0); opacity:1; }
-    18%  { transform: translate3d(var(--outPreX,0),var(--outPreY,0),0); }
-    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); opacity:0; }
-  }
-  @keyframes out-to-nofade {
-    0%   { transform: translate3d(0,0,0); }
-    18%  { transform: translate3d(var(--outPreX,0),var(--outPreY,0),0); }
-    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); }
-  }
-  @keyframes in-linear {
-    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0; }
-    100% { transform: translate3d(0,0,0); opacity:1; }
-  }
-  @keyframes in-linear-nofade {
-    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); }
-    100% { transform: translate3d(0,0,0); }
-  }
-  @keyframes out-linear {
-    0%   { transform: translate3d(0,0,0); opacity:1; }
-    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); opacity:0; }
-  }
-  @keyframes out-linear-nofade {
-    0%   { transform: translate3d(0,0,0); }
-    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); }
-  }
+
+  /* 預設動畫（含回彈） */
+@keyframes in-from {
+  0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0; }
+  70%  { transform: translate3d(var(--inOverX,0),var(--inOverY,0),0); opacity:1; }
+  100% { transform: translate3d(0,0,0); opacity:1; }
+}
+@keyframes in-from-nofade {
+  0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); }
+  70%  { transform: translate3d(var(--inOverX,0),var(--inOverY,0),0); }
+  100% { transform: translate3d(0,0,0); }
+}
+@keyframes out-to {
+  0%   { transform: translate3d(0,0,0); opacity:1; }
+  18%  { transform: translate3d(var(--outPreX,0),var(--outPreY,0),0); }
+  100% { transform: translate3d(var(--toX,0),var(--toY,0),0); opacity:0; }
+}
+@keyframes out-to-nofade {
+  0%   { transform: translate3d(0,0,0); }
+  18%  { transform: translate3d(var(--outPreX,0),var(--outPreY,0),0); }
+  100% { transform: translate3d(var(--toX,0),var(--toY,0),0); }
+}
+@keyframes in-linear {
+  0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0; }
+  100% { transform: translate3d(0,0,0); opacity:1; }
+}
+@keyframes in-linear-nofade {
+  0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); }
+  100% { transform: translate3d(0,0,0); }
+}
+@keyframes out-linear {
+  0%   { transform: translate3d(0,0,0); opacity:1; }
+  100% { transform: translate3d(var(--toX,0),var(--toY,0),0); opacity:0; }
+}
+@keyframes out-linear-nofade {
+  0%   { transform: translate3d(0,0,0); }
+  100% { transform: translate3d(var(--toX,0),var(--toY,0),0); }
+}
+
 
   .navBtn{
     display:flex; position:absolute; top:50%; transform:translateY(-50%);
@@ -135,8 +141,7 @@
   .speech-bubble .content > *:first-child{ margin-top:0; }
   .speech-bubble .content br:first-child{ display:none; }
 </style>
-</head>
-<body ondragstart="return false;">
+</head><body ondragstart="return false;">
 <div class="centerer">
   <div class="box">
     <div class="stageWrap"><div id="stage" class="stage" aria-label="故事舞台"></div></div>
@@ -154,19 +159,44 @@
       </svg>
     </button>
 
-    <div class="controls"><div id="hint" class="hint">載入中…</div></div>
+    <div class="controls"><div id="hint" class="hint">正在預載圖片…</div></div>
   </div>
 </div>
 <script>
 const EASE='cubic-bezier(.2,.9,.2,1)';
 const LIN='linear';
-const project = {"pages":[{"id":"ny4zlqb","name":"第 1 頁","items":[{"id":"2kyz8b0","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/12345.jpg","layer":"bgfull","top":-1.4925373134328357,"left":0,"width":22,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"oixoxr2","name":"1","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":67.11603273952817,"left":72.81877043400218,"width":32.393102121930895,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"ss39rrr","name":"2","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":85.80966137056653,"left":88.13599162339466,"width":22,"order":1,"flipX":true,"rotate":173,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.6,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"11a9zaw","name":"3","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":66.70518375862622,"left":-3.9019595273201273,"width":31.162253990640426,"order":2,"flipX":false,"rotate":44,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"cbr6dd6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":82.52286952335098,"left":-7.868025728144966,"width":22,"order":3,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.6,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"i9v6duo","name":"很","layer":"speech","top":5.896324827475525,"left":3.8934119708528323,"width":61.05733273500438,"order":0,"inDir":"in-left","inDelay":0.6,"inSpeed":1.1,"outDir":"auto","outDelay":0,"outSpeed":0.9,"inFade":false,"outFade":true,"speech":{"html":"很久很久以前，巨龍突然出現","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#000000","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"33zsaz7","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/086.png","layer":"character","top":-0.4108489809019419,"left":1.2308481312904673,"width":100,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.8,"inSpeed":1.4,"outDir":"auto","outDelay":0.2,"outSpeed":0.9,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1}]},{"id":"ielfisj","name":"第 1 頁（副本）","items":[{"id":"jyvtw51","name":"1","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":67.11603273952817,"left":72.81877043400218,"width":32.393102121930895,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"eh725c8","name":"2","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":85.39881238966458,"left":88.4095134303481,"width":22,"order":1,"flipX":true,"rotate":173,"inDir":"in-bottom","inDelay":0.4,"inSpeed":0.7,"outDir":"auto","outDelay":0.2,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"u4ok5r2","name":"3","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":66.70518375862622,"left":-3.9019595273201273,"width":31.162253990640426,"order":2,"flipX":false,"rotate":44,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"8ibnve3","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":82.52286952335098,"left":-7.731264824668248,"width":22,"order":3,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.4,"inSpeed":0.7,"outDir":"auto","outDelay":0.2,"outSpeed":0.7,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"tgowaex","name":"很","layer":"speech","top":5.896324827475525,"left":3.8934119708528323,"width":61.05733273500438,"order":0,"inDir":"in-left","inDelay":0.4,"inSpeed":1.1,"outDir":"auto","outDelay":0.6,"outSpeed":0.7,"inFade":false,"outFade":true,"speech":{"html":"帶走了公主就消失不見．．．","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#000000","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"4ozhs1z","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/071-1.png","layer":"character","top":66.70518375862622,"left":29.19417911404577,"width":22,"order":0,"flipX":false,"rotate":4,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-top","outDelay":0,"outSpeed":0.5,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"u4q8jj6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/086.png","layer":"character","top":60.950969827586206,"left":41.51146131805157,"width":22,"order":1,"flipX":false,"rotate":0,"inDir":"in-right","inDelay":1,"inSpeed":0.35,"outDir":"out-top","outDelay":0,"outSpeed":0.5,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"qgvtikv","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"character","top":83.75541646605681,"left":41.9129431373806,"width":8.733465820458576,"order":2,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-bottom","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"4mypwxo","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"background","top":64.85636334456748,"left":25.63839562365109,"width":22,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-bottom","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1}]},{"id":"34v5p2d","name":"第 2 頁","items":[{"id":"heedjt8","name":"71","src":"https://rorocat030.github.io/shierusya/shierusya-gacha/3rd-dress/dress-04.png","layer":"character","top":34.26443202979516,"left":20.577185792349727,"width":30.75197128021027,"order":1,"flipX":false,"rotate":4,"inDir":"in-bottom","inDelay":0.6,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"bozef86","name":"86","src":"https://rorocat030.github.io/shierusya/shierusya-gacha/3rd-dress/dress-05.png","layer":"character","top":22.102356642907598,"left":41.41478825136612,"width":40.46199542705729,"order":0,"flipX":false,"rotate":7,"inDir":"in-bottom","inDelay":0.6,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"zjs5up6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/marry.jpg","layer":"bgfull","top":-6.27219737020469,"left":0,"width":100,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"rdcjspf","name":"九","layer":"speech","top":4.869202375220671,"left":5.808064619526893,"width":30.835309955766395,"order":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"他們已婚!!!!","side":"bottom","triangle":"right","pointer":32,"nudge":true,"sizeEm":1.2,"padEm":0.5,"bgHex":"#ff4747","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0.03},"inCustomDur":1,"outCustomDur":1},{"id":"4oqglfm","name":"已婚","layer":"speech","top":18.825461647727273,"left":68.67911153119093,"width":16.977788279773158,"order":1,"inDir":"in-left","inDelay":1,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#fe8686","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"cg1oldf","name":"恭喜","layer":"speech","top":73.2787674530573,"left":8.141547535098404,"width":22.766416650639997,"order":2,"inDir":"in-right","inDelay":1,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#ff6666","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"r5uy4nv","name":"恭喜","layer":"speech","top":49.893465909090914,"left":-14.699515919556063,"width":14.699515919556063,"order":4,"inDir":"in-right","inDelay":0.4,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#feffad","alpha":100,"textHex":"#000000","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"qwtl6ej","name":"已婚","layer":"speech","top":29.154829545454547,"left":-14.707387146286749,"width":14.707387146286749,"order":3,"inDir":"in-right","inDelay":0.2,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#7a2424","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"efv74fl","name":"已婚（複製）","layer":"speech","top":12.955729166666666,"left":-13.19611161399504,"width":13.19611161399504,"order":5,"inDir":"in-right","inDelay":0.6,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#7a2424","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"j00tcak","name":"恭喜（複製）","layer":"speech","top":26.509232954545453,"left":-14.699515919556063,"width":14.699515919556063,"order":6,"inDir":"in-right","inDelay":1,"inSpeed":"custom","outDir":"out-left","outDelay":1,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#feffad","alpha":100,"textHex":"#000000","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1}]}],"currentPage":0,"ratio":{"w":12,"h":8}};
+const project = {"pages":[{"id":"hzuj5ei","name":"第 1 頁（副本）","items":[{"id":"zgskwov","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/12345.jpg","layer":"bgfull","top":-2.605646306818182,"left":0,"width":22,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"9z02gos","name":"很久很久以前（複製）","layer":"speech","top":32.88796164772727,"left":18.747046313799622,"width":59.92143194706995,"order":0,"inDir":"in-top","inDelay":0.6,"inSpeed":0.5,"outDir":"auto","outDelay":0,"outSpeed":0.9,"inFade":false,"outFade":false,"speech":{"html":"很久很久以前 ","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#ffffff","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"48ojcgg","name":"很久很久以前（複製）（複製）","layer":"speech","top":30.340021306818183,"left":16.776937618147446,"width":59.92143194706995,"order":1,"inDir":"in-top","inDelay":0.6,"inSpeed":0.5,"outDir":"auto","outDelay":0,"outSpeed":0.9,"inFade":false,"outFade":false,"speech":{"html":"很久很久以前 ","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#000000","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1}]},{"id":"7cfnear","name":"第 1 頁（副本）（副本）","items":[{"id":"czjt4yw","name":"1","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":67.11603273952817,"left":72.81877043400218,"width":32.393102121930895,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"yf3uhsr","name":"2","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":85.80966137056653,"left":88.13599162339466,"width":22,"order":1,"flipX":true,"rotate":173,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"taz9sds","name":"3","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":66.70518375862622,"left":-3.9019595273201273,"width":31.162253990640426,"order":2,"flipX":false,"rotate":44,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"au238oz","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":82.52286952335098,"left":-7.868025728144966,"width":22,"order":3,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"5cjv7dk","name":"巨龍突然出現","layer":"speech","top":7.03125,"left":4.649102079395085,"width":41.20687618147448,"order":0,"inDir":"in-left","inDelay":0.6,"inSpeed":1.1,"outDir":"auto","outDelay":0,"outSpeed":0.9,"inFade":false,"outFade":true,"speech":{"html":"巨龍突然出現！","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#000000","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"6u2fjzy","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/086.png","layer":"character","top":-0.4108489809019419,"left":1.2308481312904673,"width":100,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.8,"inSpeed":1.4,"outDir":"auto","outDelay":0.2,"outSpeed":0.9,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1}]},{"id":"ielfisj","name":"第 1 頁（副本）","items":[{"id":"jyvtw51","name":"1","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":67.11603273952817,"left":72.81877043400218,"width":32.393102121930895,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"eh725c8","name":"2","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":85.39881238966458,"left":88.4095134303481,"width":22,"order":1,"flipX":true,"rotate":173,"inDir":"in-bottom","inDelay":0.4,"inSpeed":0.7,"outDir":"auto","outDelay":0.2,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"u4ok5r2","name":"3","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":66.70518375862622,"left":-3.9019595273201273,"width":31.162253990640426,"order":2,"flipX":false,"rotate":44,"inDir":"in-bottom","inDelay":0.2,"inSpeed":0.7,"outDir":"auto","outDelay":0.4,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"8ibnve3","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"foreground","top":82.52286952335098,"left":-7.731264824668248,"width":22,"order":3,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0.4,"inSpeed":0.7,"outDir":"auto","outDelay":0.2,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"tgowaex","name":"很","layer":"speech","top":5.896324827475525,"left":3.8934119708528323,"width":61.05733273500438,"order":0,"inDir":"in-left","inDelay":0.4,"inSpeed":1.1,"outDir":"auto","outDelay":0.6,"outSpeed":0.7,"inFade":false,"outFade":true,"speech":{"html":"帶走了公主就消失不見．．．","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.75,"padEm":0.4,"bgHex":"#000000","alpha":100,"textHex":"#ffffff","brMode":"per","brAll":21,"brTL":65,"brTR":100,"brBR":64,"brBL":100,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"4ozhs1z","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/071-1.png","layer":"character","top":66.70365767045455,"left":29.758388468809073,"width":22,"order":0,"flipX":false,"rotate":4,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-top","outDelay":0,"outSpeed":0.5,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"u4q8jj6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/086.png","layer":"character","top":60.95081676136363,"left":40.94399810964083,"width":22,"order":1,"flipX":false,"rotate":0,"inDir":"in-right","inDelay":1,"inSpeed":0.35,"outDir":"out-top","outDelay":0,"outSpeed":0.5,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"qgvtikv","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"character","top":83.75541646605681,"left":41.9129431373806,"width":8.733465820458576,"order":2,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-bottom","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1},{"id":"4mypwxo","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/TREE.png","layer":"background","top":64.85636334456748,"left":25.63839562365109,"width":22,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"out-bottom","outDelay":0.6,"outSpeed":1.1,"inFade":false,"outFade":false,"inCustomDur":1,"outCustomDur":1}]},{"id":"34v5p2d","name":"第 2 頁","items":[{"id":"heedjt8","name":"71","src":"https://rorocat030.github.io/shierusya/shierusya-gacha/3rd-dress/dress-04.png","layer":"character","top":34.26443202979516,"left":20.577185792349727,"width":30.75197128021027,"order":1,"flipX":false,"rotate":4,"inDir":"in-bottom","inDelay":0.6,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"bozef86","name":"86","src":"https://rorocat030.github.io/shierusya/shierusya-gacha/3rd-dress/dress-05.png","layer":"character","top":22.102356642907598,"left":41.41478825136612,"width":40.46199542705729,"order":0,"flipX":false,"rotate":7,"inDir":"in-bottom","inDelay":0.6,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":false,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"zjs5up6","name":"圖片","src":"https://rorocat030.github.io/shierusya/TEXT/img/marry.jpg","layer":"bgfull","top":-6.27219737020469,"left":0,"width":100,"order":0,"flipX":false,"rotate":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"inCustomDur":1,"outCustomDur":1},{"id":"rdcjspf","name":"九","layer":"speech","top":4.869202375220671,"left":5.808064619526893,"width":30.835309955766395,"order":0,"inDir":"in-bottom","inDelay":0,"inSpeed":0.7,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"他們已婚!!!!","side":"bottom","triangle":"right","pointer":32,"nudge":true,"sizeEm":1.2,"padEm":0.5,"bgHex":"#ff4747","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0.03},"inCustomDur":1,"outCustomDur":1},{"id":"4oqglfm","name":"已婚","layer":"speech","top":18.825461647727273,"left":68.67911153119093,"width":16.977788279773158,"order":1,"inDir":"in-left","inDelay":1,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#fe8686","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"cg1oldf","name":"恭喜","layer":"speech","top":73.2787674530573,"left":8.141547535098404,"width":22.766416650639997,"order":2,"inDir":"in-right","inDelay":1,"inSpeed":1.4,"outDir":"auto","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#ff6666","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":1,"outCustomDur":1},{"id":"r5uy4nv","name":"恭喜","layer":"speech","top":49.893465909090914,"left":-14.699515919556063,"width":14.699515919556063,"order":4,"inDir":"in-right","inDelay":0.4,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#feffad","alpha":100,"textHex":"#000000","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"qwtl6ej","name":"已婚","layer":"speech","top":29.154829545454547,"left":-14.707387146286749,"width":14.707387146286749,"order":3,"inDir":"in-right","inDelay":0.2,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#7a2424","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"efv74fl","name":"已婚（複製）","layer":"speech","top":12.955729166666666,"left":-13.19611161399504,"width":13.19611161399504,"order":5,"inDir":"in-right","inDelay":0.6,"inSpeed":"custom","outDir":"out-left","outDelay":0,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"已婚已婚","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.15,"bgHex":"#7a2424","alpha":100,"textHex":"#ffffff","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1},{"id":"j00tcak","name":"恭喜（複製）","layer":"speech","top":26.509232954545453,"left":-14.699515919556063,"width":14.699515919556063,"order":6,"inDir":"in-right","inDelay":1,"inSpeed":"custom","outDir":"out-left","outDelay":1,"outSpeed":0.7,"inFade":true,"outFade":true,"speech":{"html":"恭喜恭喜","side":"bottom","triangle":"none","pointer":50,"nudge":false,"sizeEm":1.2,"padEm":0.3,"bgHex":"#feffad","alpha":100,"textHex":"#000000","brMode":"unified","brAll":16,"brTL":16,"brTR":16,"brBR":16,"brBL":16,"nudgeEm":0},"inCustomDur":3,"outCustomDur":1}]}],"currentPage":0,"ratio":{"w":12,"h":8}};
 let idx = 0;
 let busy = false;
 const stage = document.getElementById('stage');
 const navPrev = document.getElementById('navPrev');
 const navNext = document.getElementById('navNext');
 const hintEl = document.getElementById('hint');
+
+function imgReady(img){
+  return img.complete && img.naturalWidth > 0;
+}
+function decodeSafe(img){
+  if (imgReady(img)) return Promise.resolve();
+  if (typeof img.decode === 'function') {
+    return img.decode().catch(()=>{}); // 忽略解碼錯誤，失敗則交給 load/error 事件
+  }
+  return new Promise(res=>{
+    img.addEventListener('load', res, {once:true});
+    img.addEventListener('error', res, {once:true}); // 失敗也放行，避免卡住
+  });
+}
+async function waitForPageImages(pageIdx, {timeout=800}={}){
+  const nodes = qPageNodes(pageIdx);
+  const imgs = nodes.flatMap(n => Array.from(n.querySelectorAll('img')));
+  if (imgs.length === 0) return;
+  const all = Promise.allSettled(imgs.map(decodeSafe));
+  // 誰先到就放行（全部解好或超過 timeout）
+  await Promise.race([all, new Promise(r=>setTimeout(r, timeout))]);
+}
+
+  
+  
 
 function zBase(layer){ return layer==='foreground'?30: layer==='speech'?25: layer==='character'?20: layer==='background'?10: 0; }
 function zIndexOf(it){ return zBase(it.layer)*100 + (it.order||0); }
@@ -175,34 +205,28 @@ function oppositeOut(inDir){ return ({'in-top':'out-top','in-bottom':'out-bottom
 function rgba(hex,a){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)||['','00','00','00']; const r=parseInt(m[1],16), g=parseInt(m[2],16), b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; }
 function textFromHTML(html){ const d=document.createElement('div'); d.innerHTML=html||''; return d.textContent||d.innerText||''; }
 
-function stageSize(){ const r=stage.getBoundingClientRect(); return { sw:r.width, sh:r.height }; }
-
-/* 用舞台尺寸直接算，避免量每個元素（更快） */
-function setInVarsFast(node, dir){
-  const {sw, sh} = stageSize();
-  const dist = 1.15, over = 0.06; // 進場距離=1.15*容器、回彈=6%
-  let fx=0, fy=0, ox=0, oy=0;
-  if(dir==='in-left'){ fx = -sw*dist; ox = sw*over; }
-  else if(dir==='in-right'){ fx = sw*dist; ox = -sw*over; }
-  else if(dir==='in-top'){ fy = -sh*dist; oy = sh*over; }
-  else { fy = sh*dist; oy = -sh*over; }
-  node.style.setProperty('--fromX', fx+'px');
-  node.style.setProperty('--fromY', fy+'px');
-  node.style.setProperty('--inOverX', ox+'px');
-  node.style.setProperty('--inOverY', oy+'px');
+function rectIn(el, container){ const r=el.getBoundingClientRect(), s=container.getBoundingClientRect(); return { x:r.left-s.left, y:r.top-s.top, w:r.width, h:r.height, sw:s.width, sh:s.height }; }
+function overshoot(px){ return Math.min(24, Math.abs(px)*0.03) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
+function preNudge(px){ return Math.min(24, Math.abs(px)*0.04) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
+function setInVars(node, dir, container){
+  const r=rectIn(node, container);
+  let v;
+  if(dir==='in-left')   v={ x:-(r.x + r.w + 4), y:0 };
+  else if(dir==='in-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
+  else if(dir==='in-top')   v={ x:0, y:-(r.y + r.h + 4) };
+  else                      v={ x:0, y:(r.sh - r.y)+r.h + 4 };
+  node.style.setProperty('--fromX', v.x+'px'); node.style.setProperty('--fromY', v.y+'px');
+  node.style.setProperty('--inOverX', overshoot(v.x)+'px'); node.style.setProperty('--inOverY', overshoot(v.y)+'px');
 }
-function setOutVarsFast(node, dir){
-  const {sw, sh} = stageSize();
-  const dist = 1.15, pre = 0.04; // 出場預推=4%
-  let tx=0, ty=0, px=0, py=0;
-  if(dir==='out-left'){ tx = -sw*dist; px = sw*pre; }
-  else if(dir==='out-right'){ tx = sw*dist; px = -sw*pre; }
-  else if(dir==='out-top'){ ty = -sh*dist; py = sh*pre; }
-  else { ty = sh*dist; py = -sh*pre; }
-  node.style.setProperty('--toX', tx+'px');
-  node.style.setProperty('--toY', ty+'px');
-  node.style.setProperty('--outPreX', px+'px');
-  node.style.setProperty('--outPreY', py+'px');
+function setOutVars(node, dir, container){
+  const r=rectIn(node, container);
+  let v;
+  if(dir==='out-left')   v={ x:-(r.x + r.w + 4), y:0 };
+  else if(dir==='out-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
+  else if(dir==='out-top')   v={ x:0, y:-(r.y + r.h + 4) };
+  else                       v={ x:0, y:(r.sh - r.y)+r.h + 4 };
+  node.style.setProperty('--toX', v.x+'px'); node.style.setProperty('--toY', v.y+'px');
+  node.style.setProperty('--outPreX', preNudge(v.x)+'px'); node.style.setProperty('--outPreY', preNudge(v.y)+'px');
 }
 
 function bubbleCSS(selector,s){
@@ -244,7 +268,6 @@ function createNode(it, pageIdx){
   d.className='item layer-'+it.layer + (it.layer==='bgfull'?' bgfull': (it.layer==='speech'?' speech':'' ));
   d.style.top=it.top+'%'; d.style.left=(it.layer==='bgfull'?'0':it.left)+'%'; d.style.width=(it.layer==='bgfull'?'100':it.width)+'%';
   d.style.zIndex=zIndexForPreview(it, pageIdx);
-
   if(it.layer==='speech'){
     const bubble=document.createElement('div'); bubble.className='speech-bubble speech-'+it.id;
     const content=document.createElement('div'); content.className='content'; content.innerHTML=it.speech?.html||''; bubble.appendChild(content); d.appendChild(bubble);
@@ -268,7 +291,6 @@ function createNode(it, pageIdx){
     if(it.layer==='bgfull'){ img.style.transform='none'; } else { img.style.transform='scaleX('+(it.flipX?-1:1)+') rotate('+(it.rotate||0)+'deg)'; }
     d.appendChild(img);
   }
-
   d.dataset.inDir=it.inDir; d.dataset.inDelay=it.inDelay; d.dataset.inSpeed=String(it.inSpeed);
   d.dataset.outDir=it.outDir||'auto'; d.dataset.outDelay=it.outDelay; d.dataset.outSpeed=String(it.outSpeed);
   d.dataset.inKind=(it.inSpeed==='custom')?'custom':'preset';
@@ -277,7 +299,6 @@ function createNode(it, pageIdx){
   d.dataset.outCustom=String(Math.max(0.2,Math.min(15, Number(it.outCustomDur||1))));
   d.dataset.page=String(pageIdx); d.dataset.item=it.id;
   d.dataset.inFade=(it.inFade===false?'0':'1'); d.dataset.outFade=(it.outFade===false?'0':'1');
-
   return d;
 }
 function qPageNodes(p){ return [...stage.querySelectorAll('.item[data-page="'+p+'"]')]; }
@@ -289,12 +310,9 @@ function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
     if(onlyNonBg && it.layer==='bgfull') return;
     if(it.layer==='bgfull' && stage.querySelector('.item[data-page="'+pageIdx+'"][data-item="'+it.id+'"]')) return;
     const n = createNode(it, pageIdx);
-    if(it.layer==='bgfull' && markFirstBgPersisted){
-      n.dataset.persisted='1';
-      n.style.visibility='visible'; n.style.opacity='1'; // 首頁背景立即顯示
-    }
+    if(it.layer==='bgfull' && markFirstBgPersisted) n.dataset.persisted='1';
     stage.appendChild(n);
-    if(it.layer==='speech'){
+    if(it.layer==='speech') {
       const px1 = autoFontPxForNode(n, it.speech||{});
       n.querySelector('.speech-bubble').style.fontSize = px1 + 'px';
       requestAnimationFrame(()=>{ const px2 = autoFontPxForNode(n, it.speech||{}); n.querySelector('.speech-bubble').style.fontSize = px2 + 'px'; });
@@ -303,36 +321,21 @@ function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
 }
 function durIn(n){ return (n.dataset.inKind==='custom')? Number(n.dataset.inCustom): Number(n.dataset.inSpeed); }
 function durOut(n){ return (n.dataset.outKind==='custom')? Number(n.dataset.outCustom): Number(n.dataset.outSpeed); }
-
-/* 進場：不等待圖片，直接用舞台尺寸算位移；啟動當下才顯示，避免閃爍 */
-async function playIn(pageIdx, {animateBg=true}={}){
-  const nodes = qPageNodes(pageIdx);
-  nodes.forEach(clearAnim);
-
+function playIn(pageIdx, {animateBg=true}={}){
+  const nodes = qPageNodes(pageIdx); nodes.forEach(clearAnim);
   nodes.forEach(n=>{
     const isBg = n.classList.contains('bgfull');
     const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
     const skipOpt = isBg && !animateBg;
-
-    if(skipFirstOrPersist || skipOpt){
-      n.style.visibility='visible'; n.style.opacity='1';
-      return;
-    }
-
-    setInVarsFast(n, n.dataset.inDir);
-    // 無淡入者要先把透明度設回 1
-    if(n.dataset.inFade === '0') n.style.opacity='1';
-    n.style.visibility='visible';
-    void n.offsetWidth; // 保險 reflow
-
+    if(skipFirstOrPersist || skipOpt) return;
+    setInVars(n, n.dataset.inDir, stage);
     const custom = (n.dataset.inKind==='custom');
     const name = custom ? ((n.dataset.inFade === '0') ? 'in-linear-nofade' : 'in-linear')
                         : ((n.dataset.inFade === '0') ? 'in-from-nofade' : 'in-from');
     const d = durIn(n);
-    n.style.animation = `${name} ${d}s ${(custom?LIN:EASE)} ${n.dataset.inDelay}s both`;
-    n.style.webkitAnimation = n.style.animation;
+    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
+    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
   });
-
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
     const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
@@ -340,45 +343,44 @@ async function playIn(pageIdx, {animateBg=true}={}){
     if(skipFirstOrPersist || skipOpt) return m;
     return Math.max(m, Number(n.dataset.inDelay) + durIn(n));
   },0);
-  return new Promise(r=>setTimeout(r, (end+0.02)*1000));
+  return new Promise(r=>setTimeout(r, (end+0.05)*1000));
 }
-
-/* 出場：同樣不量元素，直接把方向推到畫面外 */
-async function playOut(pageIdx, {excludeBg=false}={}){
-  const nodes = qPageNodes(pageIdx);
-  nodes.forEach(clearAnim);
-
+function playOut(pageIdx, {excludeBg=false}={}){
+  const nodes = qPageNodes(pageIdx); nodes.forEach(clearAnim);
   nodes.forEach(n=>{
     const isBg = n.classList.contains('bgfull');
-    if(excludeBg && isBg){ n.style.visibility='visible'; n.style.opacity='1'; return; }
-
+    if(excludeBg && isBg) return;
     const base = (n.dataset.outDir==='auto') ? oppositeOut(n.dataset.inDir) : n.dataset.outDir;
-    setOutVarsFast(n, base);
-    if(n.dataset.outFade === '0') n.style.opacity='1';
-    n.style.visibility='visible';
-    void n.offsetWidth;
-
+    setOutVars(n, base, stage);
     const custom = (n.dataset.outKind==='custom');
     const name = custom ? ((n.dataset.outFade === '0') ? 'out-linear-nofade' : 'out-linear')
                         : ((n.dataset.outFade === '0') ? 'out-to-nofade' : 'out-to');
     const d = durOut(n);
-    n.style.animation = `${name} ${d}s ${(custom?LIN:EASE)} ${n.dataset.outDelay}s both`;
-    n.style.webkitAnimation = n.style.animation;
+    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
+    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
   });
-
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
     if(excludeBg && isBg) return m;
     return Math.max(m, Number(n.dataset.outDelay) + durOut(n));
   },0);
-  return new Promise(r=>setTimeout(r, (end+0.02)*1000));
+  return new Promise(r=>setTimeout(r, (end+0.05)*1000));
 }
-
 function removePage(pageIdx, {onlyNonBg=false}={}){
   qPageNodes(pageIdx).forEach(n=>{
     if(onlyNonBg && n.classList.contains('bgfull')) return;
     n.remove();
   });
+}
+
+function preloadAllImages(){
+  const urls = new Set();
+  project.pages.forEach(p=>{ p.items.forEach(it=>{ if(it.layer!=='speech' && it.src) urls.add(it.src); }); });
+  const tasks = [...urls].map(u => new Promise(resolve=>{
+    const im = new Image(); im.referrerPolicy='no-referrer';
+    im.onload=()=>resolve(); im.onerror=()=>resolve(); im.src=u;
+  }));
+  return Promise.allSettled(tasks);
 }
 
 async function openAt(current){
@@ -391,24 +393,37 @@ async function openAt(current){
       addPage(i);
     }
   }
-  await playIn(idx);
+  await new Promise(requestAnimationFrame); // 先排版好
+  await waitForPageImages(idx);             // 再等圖可畫
+  await playIn(idx);                        // 然後才進場動畫
 }
 
+
 async function go(to){
-  if(to===idx || busy) return;
+  if(to===idx) return;
+  if(busy) return;
   busy = true;
   try{
     if(to>idx){
       await playOut(idx, {excludeBg:true});
       removePage(idx, {onlyNonBg:true});
-      idx = to; addPage(idx); await playIn(idx, {animateBg:true});
+      idx = to; addPage(idx);
+      await new Promise(requestAnimationFrame);
+      await waitForPageImages(idx);
+      await playIn(idx, {animateBg:true});
     }else{
       await playOut(idx, {excludeBg:false});
       removePage(idx, {onlyNonBg:false});
-      idx = to; addPage(idx, {onlyNonBg:true}); await playIn(idx, {animateBg:false});
+      idx = to; addPage(idx, {onlyNonBg:true});
+      await new Promise(requestAnimationFrame);
+      await waitForPageImages(idx);
+      await playIn(idx, {animateBg:false});
     }
-  }finally{ busy = false; }
+  }finally{
+    busy = false;
+  }
 }
+
 
 navPrev.onclick = ()=> { if(idx>0) go(idx-1); };
 navNext.onclick = ()=> { if(idx<project.pages.length-1) go(idx+1); };
@@ -426,11 +441,13 @@ window.addEventListener('resize', debounce(()=>{
   });
 }, 120));
 
-(function bootstrap(){
-  if(hintEl) hintEl.remove();
-  openAt(0);
+(async ()=>{
+  try{ await preloadAllImages(); }
+  finally{
+    if(hintEl) hintEl.remove();
+    openAt(0);
+  }
 })();
-
 function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
 </script>
 </body></html>
