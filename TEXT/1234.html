@@ -25,7 +25,10 @@
     max-height:80vh;
   }
   .controls{ display:flex; align-items:center; gap:.5rem; justify-content:center; padding:.25rem 0; background:transparent; }
-  .item{ position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
+
+  /* 先隱藏，避免「看到終態再開始動」的閃爍 */
+  .item{ position:absolute; will-change: transform, opacity; -webkit-backface-visibility:hidden; backface-visibility:hidden;
+         visibility:hidden; opacity:0; }
   .item.bgfull{ left:0 !important; width:100% !important; }
   .item img{ display:block; width:100%; height:auto; transform-origin:center center; -webkit-user-drag:none; user-drag:none; }
 
@@ -56,7 +59,6 @@
      drop-shadow(0 0em 1em rgba(0,0,0,0.6))
   }
 
-  /* 只在 iOS 啟用：-webkit-overflow-scrolling 是 iOS 專屬特性 */
 @supports (-webkit-overflow-scrolling: touch) {
   .layer-foreground img{
     filter:
@@ -78,7 +80,7 @@
   }
 }
 
-  /* ★ Safari 友善：全部改成 translate3d 版本 */
+  /* 全部用 translate3d，Safari 友善 */
   @keyframes in-from {
     0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0; }
     70%  { transform: translate3d(var(--inOverX,0),var(--inOverY,0),0); opacity:1; }
@@ -152,7 +154,7 @@
       </svg>
     </button>
 
-    <div class="controls"><div id="hint" class="hint">正在預載圖片…</div></div>
+    <div class="controls"><div id="hint" class="hint">載入中…</div></div>
   </div>
 </div>
 <script>
@@ -173,28 +175,34 @@ function oppositeOut(inDir){ return ({'in-top':'out-top','in-bottom':'out-bottom
 function rgba(hex,a){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)||['','00','00','00']; const r=parseInt(m[1],16), g=parseInt(m[2],16), b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; }
 function textFromHTML(html){ const d=document.createElement('div'); d.innerHTML=html||''; return d.textContent||d.innerText||''; }
 
-function rectIn(el, container){ const r=el.getBoundingClientRect(), s=container.getBoundingClientRect(); return { x:r.left-s.left, y:r.top-s.top, w:r.width, h:r.height, sw:s.width, sh:s.height }; }
-function overshoot(px){ return Math.min(24, Math.abs(px)*0.03) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
-function preNudge(px){ return Math.min(24, Math.abs(px)*0.04) * (px>0 ? -1 : (px<0 ? 1 : 0)); }
-function setInVars(node, dir, container){
-  const r=rectIn(node, container);
-  let v;
-  if(dir==='in-left')   v={ x:-(r.x + r.w + 4), y:0 };
-  else if(dir==='in-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
-  else if(dir==='in-top')   v={ x:0, y:-(r.y + r.h + 4) };
-  else                      v={ x:0, y:(r.sh - r.y)+r.h + 4 };
-  node.style.setProperty('--fromX', v.x+'px'); node.style.setProperty('--fromY', v.y+'px');
-  node.style.setProperty('--inOverX', overshoot(v.x)+'px'); node.style.setProperty('--inOverY', overshoot(v.y)+'px');
+function stageSize(){ const r=stage.getBoundingClientRect(); return { sw:r.width, sh:r.height }; }
+
+/* 用舞台尺寸直接算，避免量每個元素（更快） */
+function setInVarsFast(node, dir){
+  const {sw, sh} = stageSize();
+  const dist = 1.15, over = 0.06; // 進場距離=1.15*容器、回彈=6%
+  let fx=0, fy=0, ox=0, oy=0;
+  if(dir==='in-left'){ fx = -sw*dist; ox = sw*over; }
+  else if(dir==='in-right'){ fx = sw*dist; ox = -sw*over; }
+  else if(dir==='in-top'){ fy = -sh*dist; oy = sh*over; }
+  else { fy = sh*dist; oy = -sh*over; }
+  node.style.setProperty('--fromX', fx+'px');
+  node.style.setProperty('--fromY', fy+'px');
+  node.style.setProperty('--inOverX', ox+'px');
+  node.style.setProperty('--inOverY', oy+'px');
 }
-function setOutVars(node, dir, container){
-  const r=rectIn(node, container);
-  let v;
-  if(dir==='out-left')   v={ x:-(r.x + r.w + 4), y:0 };
-  else if(dir==='out-right') v={ x:(r.sw - r.x)+r.w + 4, y:0 };
-  else if(dir==='out-top')   v={ x:0, y:-(r.y + r.h + 4) };
-  else                       v={ x:0, y:(r.sh - r.y)+r.h + 4 };
-  node.style.setProperty('--toX', v.x+'px'); node.style.setProperty('--toY', v.y+'px');
-  node.style.setProperty('--outPreX', preNudge(v.x)+'px'); node.style.setProperty('--outPreY', preNudge(v.y)+'px');
+function setOutVarsFast(node, dir){
+  const {sw, sh} = stageSize();
+  const dist = 1.15, pre = 0.04; // 出場預推=4%
+  let tx=0, ty=0, px=0, py=0;
+  if(dir==='out-left'){ tx = -sw*dist; px = sw*pre; }
+  else if(dir==='out-right'){ tx = sw*dist; px = -sw*pre; }
+  else if(dir==='out-top'){ ty = -sh*dist; py = sh*pre; }
+  else { ty = sh*dist; py = -sh*pre; }
+  node.style.setProperty('--toX', tx+'px');
+  node.style.setProperty('--toY', ty+'px');
+  node.style.setProperty('--outPreX', px+'px');
+  node.style.setProperty('--outPreY', py+'px');
 }
 
 function bubbleCSS(selector,s){
@@ -236,6 +244,7 @@ function createNode(it, pageIdx){
   d.className='item layer-'+it.layer + (it.layer==='bgfull'?' bgfull': (it.layer==='speech'?' speech':'' ));
   d.style.top=it.top+'%'; d.style.left=(it.layer==='bgfull'?'0':it.left)+'%'; d.style.width=(it.layer==='bgfull'?'100':it.width)+'%';
   d.style.zIndex=zIndexForPreview(it, pageIdx);
+
   if(it.layer==='speech'){
     const bubble=document.createElement('div'); bubble.className='speech-bubble speech-'+it.id;
     const content=document.createElement('div'); content.className='content'; content.innerHTML=it.speech?.html||''; bubble.appendChild(content); d.appendChild(bubble);
@@ -259,6 +268,7 @@ function createNode(it, pageIdx){
     if(it.layer==='bgfull'){ img.style.transform='none'; } else { img.style.transform='scaleX('+(it.flipX?-1:1)+') rotate('+(it.rotate||0)+'deg)'; }
     d.appendChild(img);
   }
+
   d.dataset.inDir=it.inDir; d.dataset.inDelay=it.inDelay; d.dataset.inSpeed=String(it.inSpeed);
   d.dataset.outDir=it.outDir||'auto'; d.dataset.outDelay=it.outDelay; d.dataset.outSpeed=String(it.outSpeed);
   d.dataset.inKind=(it.inSpeed==='custom')?'custom':'preset';
@@ -267,25 +277,11 @@ function createNode(it, pageIdx){
   d.dataset.outCustom=String(Math.max(0.2,Math.min(15, Number(it.outCustomDur||1))));
   d.dataset.page=String(pageIdx); d.dataset.item=it.id;
   d.dataset.inFade=(it.inFade===false?'0':'1'); d.dataset.outFade=(it.outFade===false?'0':'1');
+
   return d;
 }
 function qPageNodes(p){ return [...stage.querySelectorAll('.item[data-page="'+p+'"]')]; }
 function clearAnim(n){ n.style.animation='none'; n.style.webkitAnimation='none'; void n.offsetWidth; }
-
-/* ★ Safari 友善：圖片 decode + 兩個 frame，再量尺寸、再套動畫 */
-const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
-async function waitImagesAndLayout(nodes){
-  const decoders = nodes.map(n=>{
-    const im = n.querySelector && n.querySelector('img');
-    if (im && typeof im.decode === 'function' && !im.complete) {
-      return im.decode().catch(()=>{});
-    }
-  }).filter(Boolean);
-  if (decoders.length) await Promise.all(decoders);
-  await nextFrame();
-  await nextFrame();
-}
-function flushLayout(n){ void n.offsetWidth; n.getBoundingClientRect(); }
 
 function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
   const p = project.pages[pageIdx];
@@ -293,9 +289,12 @@ function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
     if(onlyNonBg && it.layer==='bgfull') return;
     if(it.layer==='bgfull' && stage.querySelector('.item[data-page="'+pageIdx+'"][data-item="'+it.id+'"]')) return;
     const n = createNode(it, pageIdx);
-    if(it.layer==='bgfull' && markFirstBgPersisted) n.dataset.persisted='1';
+    if(it.layer==='bgfull' && markFirstBgPersisted){
+      n.dataset.persisted='1';
+      n.style.visibility='visible'; n.style.opacity='1'; // 首頁背景立即顯示
+    }
     stage.appendChild(n);
-    if(it.layer==='speech') {
+    if(it.layer==='speech'){
       const px1 = autoFontPxForNode(n, it.speech||{});
       n.querySelector('.speech-bubble').style.fontSize = px1 + 'px';
       requestAnimationFrame(()=>{ const px2 = autoFontPxForNode(n, it.speech||{}); n.querySelector('.speech-bubble').style.fontSize = px2 + 'px'; });
@@ -305,28 +304,35 @@ function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
 function durIn(n){ return (n.dataset.inKind==='custom')? Number(n.dataset.inCustom): Number(n.dataset.inSpeed); }
 function durOut(n){ return (n.dataset.outKind==='custom')? Number(n.dataset.outCustom): Number(n.dataset.outSpeed); }
 
+/* 進場：不等待圖片，直接用舞台尺寸算位移；啟動當下才顯示，避免閃爍 */
 async function playIn(pageIdx, {animateBg=true}={}){
   const nodes = qPageNodes(pageIdx);
   nodes.forEach(clearAnim);
-
-  await waitImagesAndLayout(nodes);
 
   nodes.forEach(n=>{
     const isBg = n.classList.contains('bgfull');
     const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
     const skipOpt = isBg && !animateBg;
-    if(skipFirstOrPersist || skipOpt) return;
 
-    setInVars(n, n.dataset.inDir, stage);
-    flushLayout(n);
+    if(skipFirstOrPersist || skipOpt){
+      n.style.visibility='visible'; n.style.opacity='1';
+      return;
+    }
+
+    setInVarsFast(n, n.dataset.inDir);
+    // 無淡入者要先把透明度設回 1
+    if(n.dataset.inFade === '0') n.style.opacity='1';
+    n.style.visibility='visible';
+    void n.offsetWidth; // 保險 reflow
 
     const custom = (n.dataset.inKind==='custom');
     const name = custom ? ((n.dataset.inFade === '0') ? 'in-linear-nofade' : 'in-linear')
                         : ((n.dataset.inFade === '0') ? 'in-from-nofade' : 'in-from');
     const d = durIn(n);
-    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
+    n.style.animation = `${name} ${d}s ${(custom?LIN:EASE)} ${n.dataset.inDelay}s both`;
     n.style.webkitAnimation = n.style.animation;
   });
+
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
     const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
@@ -334,36 +340,38 @@ async function playIn(pageIdx, {animateBg=true}={}){
     if(skipFirstOrPersist || skipOpt) return m;
     return Math.max(m, Number(n.dataset.inDelay) + durIn(n));
   },0);
-  return new Promise(r=>setTimeout(r, (end+0.05)*1000));
+  return new Promise(r=>setTimeout(r, (end+0.02)*1000));
 }
 
+/* 出場：同樣不量元素，直接把方向推到畫面外 */
 async function playOut(pageIdx, {excludeBg=false}={}){
   const nodes = qPageNodes(pageIdx);
   nodes.forEach(clearAnim);
 
-  await waitImagesAndLayout(nodes);
-
   nodes.forEach(n=>{
     const isBg = n.classList.contains('bgfull');
-    if(excludeBg && isBg) return;
+    if(excludeBg && isBg){ n.style.visibility='visible'; n.style.opacity='1'; return; }
 
     const base = (n.dataset.outDir==='auto') ? oppositeOut(n.dataset.inDir) : n.dataset.outDir;
-    setOutVars(n, base, stage);
-    flushLayout(n);
+    setOutVarsFast(n, base);
+    if(n.dataset.outFade === '0') n.style.opacity='1';
+    n.style.visibility='visible';
+    void n.offsetWidth;
 
     const custom = (n.dataset.outKind==='custom');
     const name = custom ? ((n.dataset.outFade === '0') ? 'out-linear-nofade' : 'out-linear')
                         : ((n.dataset.outFade === '0') ? 'out-to-nofade' : 'out-to');
     const d = durOut(n);
-    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
+    n.style.animation = `${name} ${d}s ${(custom?LIN:EASE)} ${n.dataset.outDelay}s both`;
     n.style.webkitAnimation = n.style.animation;
   });
+
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
     if(excludeBg && isBg) return m;
     return Math.max(m, Number(n.dataset.outDelay) + durOut(n));
   },0);
-  return new Promise(r=>setTimeout(r, (end+0.05)*1000));
+  return new Promise(r=>setTimeout(r, (end+0.02)*1000));
 }
 
 function removePage(pageIdx, {onlyNonBg=false}={}){
@@ -371,16 +379,6 @@ function removePage(pageIdx, {onlyNonBg=false}={}){
     if(onlyNonBg && n.classList.contains('bgfull')) return;
     n.remove();
   });
-}
-
-function preloadAllImages(){
-  const urls = new Set();
-  project.pages.forEach(p=>{ p.items.forEach(it=>{ if(it.layer!=='speech' && it.src) urls.add(it.src); }); });
-  const tasks = [...urls].map(u => new Promise(resolve=>{
-    const im = new Image(); im.referrerPolicy='no-referrer';
-    im.onload=()=>resolve(); im.onerror=()=>resolve(); im.src=u;
-  }));
-  return Promise.allSettled(tasks);
 }
 
 async function openAt(current){
@@ -397,8 +395,7 @@ async function openAt(current){
 }
 
 async function go(to){
-  if(to===idx) return;
-  if(busy) return;
+  if(to===idx || busy) return;
   busy = true;
   try{
     if(to>idx){
@@ -410,9 +407,7 @@ async function go(to){
       removePage(idx, {onlyNonBg:false});
       idx = to; addPage(idx, {onlyNonBg:true}); await playIn(idx, {animateBg:false});
     }
-  }finally{
-    busy = false;
-  }
+  }finally{ busy = false; }
 }
 
 navPrev.onclick = ()=> { if(idx>0) go(idx-1); };
@@ -431,12 +426,9 @@ window.addEventListener('resize', debounce(()=>{
   });
 }, 120));
 
-(async ()=>{
-  try{ await preloadAllImages(); }
-  finally{
-    if(hintEl) hintEl.remove();
-    await openAt(0); // ★ 確保首頁在圖片與版面 ready 後才啟動動畫
-  }
+(function bootstrap(){
+  if(hintEl) hintEl.remove();
+  openAt(0);
 })();
 
 function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
