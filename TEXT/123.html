@@ -374,7 +374,8 @@ async function go(to){
   if(to===idx) return;
   busy = true;
   try{
-    await 
+    await playOut();          // 讓當前頁確實退場，不留殘影/殘層
+    clearStage();             // 完全清空 → 不會殘留上一頁背景覆蓋前景
     idx = to;
     addCurrentPage(idx);
     await playIn({animateBg:true});
