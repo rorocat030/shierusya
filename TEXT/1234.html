@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-Hant"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Paper Story Viewer</title>
 <style>
   :root{ --ratio:12 / 8; }
@@ -77,43 +78,42 @@
   }
 }
 
-
-  /* 預設動畫（含回彈） */
- @keyframes in-from {
-    0%   { transform: translate(var(--fromX,0),var(--fromY,0)); opacity:0; }
-    70%  { transform: translate(var(--inOverX,0),var(--inOverY,0)); opacity:1; }
-    100% { transform: translate(0,0); opacity:1; }
+  /* ★ Safari 友善：全部改成 translate3d 版本 */
+  @keyframes in-from {
+    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0; }
+    70%  { transform: translate3d(var(--inOverX,0),var(--inOverY,0),0); opacity:1; }
+    100% { transform: translate3d(0,0,0); opacity:1; }
   }
   @keyframes in-from-nofade {
-    0%   { transform: translate(var(--fromX,0),var(--fromY,0)); }
-    70%  { transform: translate(var(--inOverX,0),var(--inOverY,0)); }
-    100% { transform: translate(0,0); }
+    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); }
+    70%  { transform: translate3d(var(--inOverX,0),var(--inOverY,0),0); }
+    100% { transform: translate3d(0,0,0); }
   }
   @keyframes out-to {
-    0%   { transform: translate(0,0); opacity:1; }
-    18%  { transform: translate(var(--outPreX,0),var(--outPreY,0)); }
-    100% { transform: translate(var(--toX,0),var(--toY,0)); opacity:0; }
+    0%   { transform: translate3d(0,0,0); opacity:1; }
+    18%  { transform: translate3d(var(--outPreX,0),var(--outPreY,0),0); }
+    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); opacity:0; }
   }
   @keyframes out-to-nofade {
-    0%   { transform: translate(0,0); }
-    18%  { transform: translate(var(--outPreX,0),var(--outPreY,0)); }
-    100% { transform: translate(var(--toX,0),var(--toY,0)); }
+    0%   { transform: translate3d(0,0,0); }
+    18%  { transform: translate3d(var(--outPreX,0),var(--outPreY,0),0); }
+    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); }
   }
   @keyframes in-linear {
-    0%   { transform: translate(var(--fromX,0),var(--fromY,0)); opacity:0; }
-    100% { transform: translate(0,0); opacity:1; }
+    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); opacity:0; }
+    100% { transform: translate3d(0,0,0); opacity:1; }
   }
   @keyframes in-linear-nofade {
-    0%   { transform: translate(var(--fromX,0),var(--fromY,0)); }
-    100% { transform: translate(0,0); }
+    0%   { transform: translate3d(var(--fromX,0),var(--fromY,0),0); }
+    100% { transform: translate3d(0,0,0); }
   }
   @keyframes out-linear {
-    0%   { transform: translate(0,0); opacity:1; }
-    100% { transform: translate(var(--toX,0),var(--toY,0)); opacity:0; }
+    0%   { transform: translate3d(0,0,0); opacity:1; }
+    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); opacity:0; }
   }
   @keyframes out-linear-nofade {
-    0%   { transform: translate(0,0); }
-    100% { transform: translate(var(--toX,0),var(--toY,0)); }
+    0%   { transform: translate3d(0,0,0); }
+    100% { transform: translate3d(var(--toX,0),var(--toY,0),0); }
   }
 
   .navBtn{
@@ -133,7 +133,8 @@
   .speech-bubble .content > *:first-child{ margin-top:0; }
   .speech-bubble .content br:first-child{ display:none; }
 </style>
-</head><body ondragstart="return false;">
+</head>
+<body ondragstart="return false;">
 <div class="centerer">
   <div class="box">
     <div class="stageWrap"><div id="stage" class="stage" aria-label="故事舞台"></div></div>
@@ -271,6 +272,21 @@ function createNode(it, pageIdx){
 function qPageNodes(p){ return [...stage.querySelectorAll('.item[data-page="'+p+'"]')]; }
 function clearAnim(n){ n.style.animation='none'; n.style.webkitAnimation='none'; void n.offsetWidth; }
 
+/* ★ Safari 友善：圖片 decode + 兩個 frame，再量尺寸、再套動畫 */
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+async function waitImagesAndLayout(nodes){
+  const decoders = nodes.map(n=>{
+    const im = n.querySelector && n.querySelector('img');
+    if (im && typeof im.decode === 'function' && !im.complete) {
+      return im.decode().catch(()=>{});
+    }
+  }).filter(Boolean);
+  if (decoders.length) await Promise.all(decoders);
+  await nextFrame();
+  await nextFrame();
+}
+function flushLayout(n){ void n.offsetWidth; n.getBoundingClientRect(); }
+
 function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
   const p = project.pages[pageIdx];
   p.items.forEach(it=>{
@@ -288,6 +304,7 @@ function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
 }
 function durIn(n){ return (n.dataset.inKind==='custom')? Number(n.dataset.inCustom): Number(n.dataset.inSpeed); }
 function durOut(n){ return (n.dataset.outKind==='custom')? Number(n.dataset.outCustom): Number(n.dataset.outSpeed); }
+
 async function playIn(pageIdx, {animateBg=true}={}){
   const nodes = qPageNodes(pageIdx);
   nodes.forEach(clearAnim);
@@ -298,24 +315,23 @@ async function playIn(pageIdx, {animateBg=true}={}){
     const isBg = n.classList.contains('bgfull');
     const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
     const skipOpt = isBg && !animateBg;
-    if (skipFirstOrPersist || skipOpt) return;
+    if(skipFirstOrPersist || skipOpt) return;
 
     setInVars(n, n.dataset.inDir, stage);
-    flushLayout(n); // 重要：讓 Safari 吃到 --fromX/--fromY 再啟動動畫
+    flushLayout(n);
 
     const custom = (n.dataset.inKind==='custom');
     const name = custom ? ((n.dataset.inFade === '0') ? 'in-linear-nofade' : 'in-linear')
                         : ((n.dataset.inFade === '0') ? 'in-from-nofade' : 'in-from');
     const d = durIn(n);
-    n.style.animation = `${name} ${d}s ${(custom?LIN:EASE)} ${n.dataset.inDelay}s both`;
+    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
     n.style.webkitAnimation = n.style.animation;
   });
-
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
     const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
     const skipOpt = isBg && !animateBg;
-    if (skipFirstOrPersist || skipOpt) return m;
+    if(skipFirstOrPersist || skipOpt) return m;
     return Math.max(m, Number(n.dataset.inDelay) + durIn(n));
   },0);
   return new Promise(r=>setTimeout(r, (end+0.05)*1000));
@@ -329,28 +345,33 @@ async function playOut(pageIdx, {excludeBg=false}={}){
 
   nodes.forEach(n=>{
     const isBg = n.classList.contains('bgfull');
-    if (excludeBg && isBg) return;
+    if(excludeBg && isBg) return;
 
     const base = (n.dataset.outDir==='auto') ? oppositeOut(n.dataset.inDir) : n.dataset.outDir;
     setOutVars(n, base, stage);
-    flushLayout(n); // 同上
+    flushLayout(n);
 
     const custom = (n.dataset.outKind==='custom');
     const name = custom ? ((n.dataset.outFade === '0') ? 'out-linear-nofade' : 'out-linear')
                         : ((n.dataset.outFade === '0') ? 'out-to-nofade' : 'out-to');
     const d = durOut(n);
-    n.style.animation = `${name} ${d}s ${(custom?LIN:EASE)} ${n.dataset.outDelay}s both`;
+    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.outDelay+'s both';
     n.style.webkitAnimation = n.style.animation;
   });
-
   const end = nodes.reduce((m,n)=>{
     const isBg = n.classList.contains('bgfull');
-    if (excludeBg && isBg) return m;
+    if(excludeBg && isBg) return m;
     return Math.max(m, Number(n.dataset.outDelay) + durOut(n));
   },0);
   return new Promise(r=>setTimeout(r, (end+0.05)*1000));
 }
 
+function removePage(pageIdx, {onlyNonBg=false}={}){
+  qPageNodes(pageIdx).forEach(n=>{
+    if(onlyNonBg && n.classList.contains('bgfull')) return;
+    n.remove();
+  });
+}
 
 function preloadAllImages(){
   const urls = new Set();
@@ -374,15 +395,6 @@ async function openAt(current){
   }
   await playIn(idx);
 }
-
-(async ()=>{
-  try{ await preloadAllImages(); }
-  finally{
-    if(hintEl) hintEl.remove();
-    await openAt(0); // 加上 await
-  }
-})();
-
 
 async function go(to){
   if(to===idx) return;
@@ -423,26 +435,10 @@ window.addEventListener('resize', debounce(()=>{
   try{ await preloadAllImages(); }
   finally{
     if(hintEl) hintEl.remove();
-    openAt(0);
+    await openAt(0); // ★ 確保首頁在圖片與版面 ready 後才啟動動畫
   }
 })();
 
-const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
-async function waitImagesAndLayout(nodes){
-  const decoders = nodes.map(n=>{
-    const im = n.querySelector && n.querySelector('img');
-    if (im && typeof im.decode === 'function' && !im.complete) {
-      return im.decode().catch(()=>{});
-    }
-  }).filter(Boolean);
-  if (decoders.length) await Promise.all(decoders);
-  // 兩個 frame：讓 WebKit 完整排版後我們再量位置
-  await nextFrame(); 
-  await nextFrame();
-}
-function flushLayout(n){ void n.offsetWidth; n.getBoundingClientRect(); }
-
-  
 function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
 </script>
 </body></html>
