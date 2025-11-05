@@ -140,6 +140,14 @@
   .speech-bubble .content{ line-height:1.45; white-space:pre-wrap; word-break:break-word; margin:0; }
   .speech-bubble .content > *:first-child{ margin-top:0; }
   .speech-bubble .content br:first-child{ display:none; }
+
+  /* 進場前：先在起點、先隱藏，避免先畫到終點 */
+.item.pre-in {
+  opacity: 0;
+  transform: translate3d(var(--fromX,0), var(--fromY,0), 0);
+}
+
+  
 </style>
 </head><body ondragstart="return false;">
 <div class="centerer">
@@ -321,30 +329,45 @@ function addPage(pageIdx, {onlyNonBg=false, markFirstBgPersisted=false}={}){
 }
 function durIn(n){ return (n.dataset.inKind==='custom')? Number(n.dataset.inCustom): Number(n.dataset.inSpeed); }
 function durOut(n){ return (n.dataset.outKind==='custom')? Number(n.dataset.outCustom): Number(n.dataset.outSpeed); }
-function playIn(pageIdx, {animateBg=true}={}){
-  const nodes = qPageNodes(pageIdx); nodes.forEach(clearAnim);
-  nodes.forEach(n=>{
+async function playIn(pageIdx, {animateBg=true}={}) {
+  const nodes = qPageNodes(pageIdx);
+  nodes.forEach(clearAnim);
+
+  // 篩掉不需要進場動畫的項目
+  const targets = nodes.filter(n => {
     const isBg = n.classList.contains('bgfull');
     const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
     const skipOpt = isBg && !animateBg;
-    if(skipFirstOrPersist || skipOpt) return;
-    setInVars(n, n.dataset.inDir, stage);
-    const custom = (n.dataset.inKind==='custom');
-    const name = custom ? ((n.dataset.inFade === '0') ? 'in-linear-nofade' : 'in-linear')
-                        : ((n.dataset.inFade === '0') ? 'in-from-nofade' : 'in-from');
-    const d = durIn(n);
-    n.style.animation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
-    n.style.webkitAnimation = name+' '+d+'s '+(custom?LIN:EASE)+' '+n.dataset.inDelay+'s both';
+    return !(skipFirstOrPersist || skipOpt);
   });
-  const end = nodes.reduce((m,n)=>{
-    const isBg = n.classList.contains('bgfull');
-    const skipFirstOrPersist = (isBg && pageIdx===0) || (isBg && n.dataset.persisted==='1');
-    const skipOpt = isBg && !animateBg;
-    if(skipFirstOrPersist || skipOpt) return m;
-    return Math.max(m, Number(n.dataset.inDelay) + durIn(n));
-  },0);
+
+  // 1) 先計算起點，並套上「pre-in」（在起點而且隱藏）
+  targets.forEach(n => {
+    setInVars(n, n.dataset.inDir, stage);
+    n.classList.add('pre-in');
+  });
+
+  // 2) 等一幀，確保瀏覽器把 pre-in 狀態畫出來（避免閃到終點）
+  await new Promise(requestAnimationFrame);
+
+  // 3) 啟動動畫；動畫一開始就把 pre-in 拿掉，交給 keyframes 控制
+  targets.forEach(n => {
+    const custom = (n.dataset.inKind==='custom');
+    const name = custom
+      ? ((n.dataset.inFade === '0') ? 'in-linear-nofade' : 'in-linear')
+      : ((n.dataset.inFade === '0') ? 'in-from-nofade' : 'in-from');
+    const d = (n.dataset.inKind==='custom') ? Number(n.dataset.inCustom) : Number(n.dataset.inSpeed);
+
+    n.addEventListener('animationstart', () => n.classList.remove('pre-in'), { once:true });
+
+    n.style.animation = `${name} ${d}s ${(custom?LIN:EASE)} ${n.dataset.inDelay}s both`;
+    n.style.webkitAnimation = n.style.animation;
+  });
+
+  const end = targets.reduce((m,n)=> Math.max(m, Number(n.dataset.inDelay) + ((n.dataset.inKind==='custom')? Number(n.dataset.inCustom): Number(n.dataset.inSpeed))), 0);
   return new Promise(r=>setTimeout(r, (end+0.05)*1000));
 }
+
 function playOut(pageIdx, {excludeBg=false}={}){
   const nodes = qPageNodes(pageIdx); nodes.forEach(clearAnim);
   nodes.forEach(n=>{
